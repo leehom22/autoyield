@@ -1,4 +1,3 @@
-# app/engine/simulator.py
 import asyncio
 import json
 from datetime import datetime, timedelta

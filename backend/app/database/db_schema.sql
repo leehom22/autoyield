@@ -240,6 +240,26 @@ CREATE POLICY staff_select_staff_roster ON staff_roster FOR SELECT USING (curren
 CREATE POLICY staff_select_market_trends ON market_trends_history FOR SELECT USING (current_setting('request.jwt.claims', true)::json->>'user_role' = 'staff');
 CREATE POLICY staff_select_marketing_campaigns ON marketing_campaigns FOR SELECT USING (current_setting('request.jwt.claims', true)::json->>'user_role' = 'staff');
 
+
+-- ======================================================
+-- 10. Notification
+-- ======================================================
+
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    notification_id TEXT NOT NULL,
+    priority TEXT CHECK (priority IN ('high', 'medium')),
+    message TEXT NOT NULL,
+    proposed_action JSONB,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    is_read BOOLEAN DEFAULT FALSE
+);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY manager_all_notifications ON notifications USING (current_setting('request.jwt.claims', true)::json->>'user_role' = 'manager');
+CREATE POLICY staff_select_notifications ON notifications FOR SELECT USING (current_setting('request.jwt.claims', true)::json->>'user_role' = 'staff');
+
 -- ======================================================
 -- End of Schema
 -- ======================================================

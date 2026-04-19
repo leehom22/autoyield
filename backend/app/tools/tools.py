@@ -1,4 +1,3 @@
-# app/agent/tools.py
 import random
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -274,9 +273,18 @@ async def send_human_notification(params: SendHumanNotificationInput) -> SendHum
         priority: 'high' | 'medium'
         Use for: spending > RM500, price changes > 15%, or irreversible actions.
     """
+    notification_id = str(uuid.uuid4())
+    supabase.table("notifications").insert({
+        "notification_id": notification_id,
+        "priority": params.priority,
+        "message": params.message,
+        "proposed_action": params.proposed_action_json,
+        "status": "pending",
+        "is_read": False
+    }).execute()
     print(f"⚠️ [Human Required] Priority: {params.priority} | Msg: {params.message}")
     return SendHumanNotificationOutput(
-        notification_id=str(uuid.uuid4()),
+        notification_id=notification_id,
         delivery_channel="admin_dashboard"
     )
 
