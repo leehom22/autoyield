@@ -31,6 +31,7 @@ class ExtractedEntities(BaseModel):
     item: Optional[str] = None
     price: Optional[float] = None
     date: Optional[str] = None
+    supplier: Optional[str] = None
 
 class ParseUnstructuredSignalOutput(BaseModel):
     """Output for parse_unstructured_signal"""
