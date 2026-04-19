@@ -1,0 +1,143 @@
+.chatbot-layout {
+  display: flex;
+  gap: 1.5rem;
+  height: calc(100vh - 200px);
+}
+
+.chat-interface {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.chat-history {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.chat-message {
+  display: flex;
+  gap: 1rem;
+  max-width: 80%;
+}
+
+.chat-message.user {
+  margin-left: auto;
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.agent .message-avatar {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--accent-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.user .message-avatar {
+  background: var(--bg-surface-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.message-bubble {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.agent .message-bubble {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  border-top-left-radius: 0;
+}
+
+.user .message-bubble {
+  background: var(--text-primary);
+  color: var(--bg-main);
+  border-top-right-radius: 0;
+}
+
+.chat-input-area {
+  display: flex;
+  padding: 1rem;
+  background: var(--bg-surface-elevated);
+  border-top: 1px solid var(--border-color);
+  gap: 1rem;
+}
+
+.chat-input {
+  flex: 1;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--accent-gold);
+}
+
+.send-btn {
+  padding: 0 1.25rem;
+}
+
+.context-sidebar {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.context-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.text-sm { font-size: 0.8125rem; }
+.mb-4 { margin-bottom: 1rem; }
+.mt-4 { margin-top: 1rem; }
+
+.context-section h4 {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.context-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.context-list li {
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 1024px) {
+  .chatbot-layout { flex-direction: column; height: auto; }
+  .context-sidebar { width: 100%; }
+}
