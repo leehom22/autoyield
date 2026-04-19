@@ -1,0 +1,84 @@
+from langgraph_agent.tools import (
+    execute_operational_action,
+    simulate_yield_scenario,
+    formulate_marketing_strategy,
+    send_human_notification,
+    evaluate_supply_chain_options,
+    generate_post_mortem_learning
+)
+from app.schemas.tools_in import (
+    ExecuteOperationalActionInput, ActionPayload,
+    SimulateYieldScenarioInput,
+    FormulateMarketingStrategyInput, MarketingConfig,
+    SendHumanNotificationInput,
+    EvaluateSupplyChainOptionsInput
+)
+from app.services.db_service import get_inventory_status, get_active_menu
+import uuid
+from typing import Dict, Any
+
+async def route_intent(parsed_output, background_tasks) -> Dict[str, Any]:
+    intent = parsed_output.intent
+    autonomy = getattr(parsed_output, "autonomy_level", "L2")  # 需要从输出中获取，我们稍后扩展输出 schema
+
+    # 临时映射：根据 intent 判断自治层级（演示用）
+    if intent in ["PRICE_UPDATE", "MENU_HIDE", "CREATE_PO", "INVENTORY_ADJUST"]:
+        autonomy = "L1"
+    elif intent in ["WHAT_IF_ANALYSIS", "DATA_ANALYSIS", "FORECAST_REQUEST"]:
+        autonomy = "L2"
+    else:
+        autonomy = "L3"
+
+    # 提取实体
+    item_name = parsed_output.entities.item
+    price = parsed_output.entities.price
+    date = parsed_output.entities.date
+
+    if autonomy == "L1":
+        # 直接执行 CRUD
+        if intent == "PRICE_UPDATE":
+            # 查找 item_id
+            inv_items = get_inventory_status()
+            item_id = next((i["id"] for i in inv_items if i["name"].lower() == (item_name or "").lower()), None)
+            if not item_id:
+                return {"status": "failed", "reason": "Item not found"}
+            result = execute_operational_action(ExecuteOperationalActionInput(
+                action_type="UPDATE_MENU",
+                payload=ActionPayload(target_id=item_id, new_value={"current_price": price}),
+                p_logic_summary="Direct price update from user instruction",
+                r_logic_summary="No debate needed"
+            ))
+            return {"status": "executed", "result": result.dict()}
+        else:
+            return {"status": "not_implemented", "intent": intent}
+
+    elif autonomy == "L2":
+        # 仅模拟分析
+        if intent == "WHAT_IF_ANALYSIS" and item_name:
+            inv_items = get_inventory_status()
+            item_id = next((i["id"] for i in inv_items if i["name"].lower() == item_name.lower()), None)
+            if item_id:
+                sim = simulate_yield_scenario(SimulateYieldScenarioInput(
+                    item_id=item_id, action="discount", value=10.0  # 假设10%折扣
+                ))
+                return {"status": "analyzed", "simulation": sim.dict()}
+        return {"status": "analyzed", "message": "Analysis not implemented for this intent"}
+
+    else:  # L3
+        # 触发 Dual-Agent 辩论（后台任务）
+        background_tasks.add_task(trigger_dual_agent, parsed_output)
+        return {"status": "agent_triggered", "message": "P-Agent and R-Agent are debating"}
+
+async def trigger_dual_agent(parsed_output):
+    # 这里实现真正的 P/R-Agent 辩论流程
+    # 可调用 simulate_yield_scenario, evaluate_supply_chain_options 等，然后执行 action
+    print(f"🧠 Dual-Agent started for intent: {parsed_output.intent}")
+    # 模拟决策，写入 decision_logs
+    from app.core.supabase import supabase
+    supabase.table("decision_logs").insert({
+        "trigger_signal": parsed_output.intent,
+        "p_agent_argument": "P-Agent proposes price increase",
+        "r_agent_argument": "R-Agent proposes flash sale",
+        "resolution": "Flash sale selected",
+        "action_taken": "formulate_marketing_strategy"
+    }).execute()
