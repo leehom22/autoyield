@@ -1,4 +1,3 @@
-# app/core/crisis_monitor.py
 import asyncio
 from datetime import datetime
 from app.core.supabase import supabase
@@ -24,18 +23,19 @@ def _record_trigger(crisis_type: str):
 async def _call_agent(app, crisis_msg: str):
     
     graph = app.state.graph
+    print(f"🔍 [Crisis Monitor] Processing crisis: {crisis_msg[:100]}...")
     
-    # 1. Pause world
-    world_engine.pause_world()
-    print(f"⏸️ [Crisis Monitor] World paused. Processing crisis: {crisis_msg[:100]}...")
+    # # Pause world
+    # world_engine.pause_world()
+    # print(f"⏸️ [Crisis Monitor] World paused. Processing crisis: {crisis_msg[:100]}...")
     
     try:
-        # 2. Call Agent
+        # Call Agent
         result = await graph.ainvoke({
             "messages": [HumanMessage(content=f"SYSTEM CRISIS DETECTED: {crisis_msg}. Analyze and propose actions.")]
         })
         
-        # 3. Record decision log
+        # Record decision log
         supabase.table("decision_logs").insert({
             "trigger_signal": "CRISIS_MONITOR",
             "p_agent_argument": result.get("p_agent_position", ""),
@@ -48,10 +48,11 @@ async def _call_agent(app, crisis_msg: str):
     except Exception as e:
         print(f"❌ Crisis monitor failed to call Agent: {e}")
     
-    finally:
-        # 4. Resume world
-        world_engine.resume_world()
-        print("▶️ [Crisis Monitor] World resumed.")
+    # finally:
+    #     # Resume world
+    #     world_engine.resume_world()
+    #     print("▶️ [Crisis Monitor] World resumed.")
+
 
 async def check_and_trigger_crisis(app):
     # Don't check data when the world is paused

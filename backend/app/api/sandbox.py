@@ -6,6 +6,33 @@ from app.core.supabase import supabase
 
 router = APIRouter()
 
+
+# ============== Simulation Controller ==============
+
+@router.post("/pause")
+async def pause_simulation():
+    from app.engine.simulator import world_engine
+    world_engine.pause_world()
+    return {"status": "paused", "message": "Simulation time stopped."}
+
+@router.post("/resume")
+async def resume_simulation():
+    from app.engine.simulator import world_engine
+    world_engine.resume_world()
+    return {"status": "resumed", "message": "Simulation time resumed."}
+
+@router.get("/status")
+async def simulation_status():
+    from app.engine.simulator import world_engine
+    return {
+        "is_paused": world_engine.is_paused,
+        "simulated_time": world_engine.simulated_time.isoformat(),
+        "velocity": world_engine.velocity if hasattr(world_engine, 'velocity') else SYSTEM_STATE.get("order_velocity_multiplier", 1.0)
+    }
+
+
+
+
 # ========== GOD MODE Endpoints (Frontend Slider) ===========
 
 # Adjust order generation velocity

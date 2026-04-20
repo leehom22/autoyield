@@ -111,7 +111,7 @@ async def approve_notification(req: NotificationApproval):
 app.include_router(chat.router, prefix="/api", tags=["Chatbot"])
 app.include_router(sandbox.router, prefix="/api/sandbox", tags=["God Mode"])
 app.include_router(agent.router, prefix="/api/agent", tags=["Agent Interact"])
-app.include_router(webhook.router, prefix="/api/webhooks", tags=["Internal Triggers"])
+# app.include_router(webhook.router, prefix="/api/webhooks", tags=["Internal Triggers"])   Currently replaced by crisis_monitor
 app.include_router(stream.router, prefix="/api/stream", tags=["SSE Streaming"])
 app.include_router(permission.router, prefix="/api/permissions", tags=["Authorization Panel"])
 
