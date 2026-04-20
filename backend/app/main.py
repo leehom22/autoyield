@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.core.supabase import supabase
-
+from app.core.crisis_monitor import crisis_monitor_loop
 from app.graph.graph import get_graph
 from langchain_core.messages import HumanMessage
 
@@ -51,11 +51,13 @@ async def lifespan(app: FastAPI):
     # Initialize the Agent Graph globally once
     app.state.graph = get_graph()
     start_scheduler(app.state.graph)
+    monitor_task = asyncio.create_task(crisis_monitor_loop(app))
     
     yield
     
     # Shutdown: Stop the engine
     world_engine.is_running = False
+    monitor_task.cancel()
     try:
         await asyncio.wait_for(engine_task, timeout=5.0)
     except (asyncio.CancelledError, asyncio.TimeoutError):

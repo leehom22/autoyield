@@ -6,6 +6,7 @@ def get_all_lc_tools() -> list:
     return [get_business_state, 
             query_macro_context,
             # parse_unstructured_signal,
+            fetch_macro_news,
             simulate_yield_scenario,
             evaluate_supply_chain_options,
             check_operational_capacity,
