@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage
 # Imports from your second file
 from app.engine.simulator import world_engine
 from app.api import stream, sandbox, agent, webhook
-from app.core.scheduler import start_scheduler
+from app.core.scheduler import start_scheduler, shutdown_scheduler
 from app.api import chat
 from app.api import permission
 
@@ -48,14 +48,15 @@ async def lifespan(app: FastAPI):
     engine_task = asyncio.create_task(world_engine.run_loop())
     print("✅ AutoYield Kernel started. World simulation engine is running.")
     
-    # Initialize the Agent Graph globally once
+    # Initialize the Agent Graph, Scheduler and Proactive Monitoring globally once
     app.state.graph = get_graph()
     start_scheduler(app.state.graph)
     monitor_task = asyncio.create_task(crisis_monitor_loop(app))
     
     yield
     
-    # Shutdown: Stop the engine
+    # Shutdown: Stop all the engine and tasks
+    shutdown_scheduler()
     world_engine.is_running = False
     monitor_task.cancel()
     try:

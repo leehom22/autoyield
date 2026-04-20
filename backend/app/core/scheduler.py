@@ -1,9 +1,9 @@
 import asyncio
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from langchain_core.messages import HumanMessage
 from app.core.supabase import supabase
 
-scheduler = BackgroundScheduler()
+scheduler = AsyncIOScheduler()
 
 async def weekly_forecast(graph):
     result = await graph.ainvoke({
@@ -27,3 +27,6 @@ def start_scheduler(graph):
         replace_existing=True
     )
     scheduler.start()
+
+def shutdown_scheduler():
+    scheduler.shutdown()

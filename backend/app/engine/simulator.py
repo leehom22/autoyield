@@ -3,8 +3,11 @@ import json
 from datetime import datetime, timedelta
 from app.core.state import SYSTEM_STATE
 from app.services.order_service import generate_random_order
-from app.services.db_service import get_active_menu, insert_mock_order
+from app.services.db_service import get_active_menu, insert_mock_order, get_inventory_item, update_inventory_quantity
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 class WorldSimulationEngine:
     def __init__(self):
@@ -17,6 +20,7 @@ class WorldSimulationEngine:
         self.menu_cache = []
         self.active_order_queue = []   # Pending orders in the simulated world
         self.sse_clients = []          # Store in SSE queues
+        self._sse_lock = asyncio.Lock()
 
     # Call when agent starts reasoning
     def pause_world(self):
@@ -27,10 +31,87 @@ class WorldSimulationEngine:
     def resume_world(self):
         self.is_paused = False
         print("▶️ [World] Time resumed.")
+    
+    # Asynchronously comsume inventory based on order by querying for the recipe of ingredients of the ordered dishes
+    async def _consume_inventory_for_order(self, order_data: dict):
 
+        items = order_data.get("items", [])
+        if not items:
+            return
+
+        # Retrieve menu
+        menu_items = await asyncio.to_thread(get_active_menu)
+        menu_by_name = {item["name"]: item for item in menu_items}
+
+        for ordered_item in items:
+            item_name = ordered_item.get("name")
+            if not item_name:
+                continue
+            menu = menu_by_name.get(item_name)
+            if not menu:
+                logger.warning(f"Menu item '{item_name}' not found, cannot consume inventory")
+                continue
+
+            ingredients = menu.get("ingredients", [])
+            if not isinstance(ingredients, list):
+                continue
+
+            for ing in ingredients:
+                inv_name = ing.get("item_name")
+                qty_needed = ing.get("qty", 0.0)
+                if not inv_name or qty_needed == 0:
+                    continue
+
+                # Check current inventory
+                inv_item = await asyncio.to_thread(get_inventory_item, inv_name)
+                if not inv_item:
+                    logger.warning(f"Inventory item '{inv_name}' not found, skip")
+                    continue
+
+                new_qty = inv_item["qty"] - qty_needed
+                if new_qty < 0:
+                    # Record warning when insufficient stock but persist to sell
+                    logger.warning(f"Insufficient stock for {inv_name}: needed {qty_needed}, had {inv_item['qty']}")
+                    new_qty = 0
+
+                # Update inventory
+                await asyncio.to_thread(
+                    update_inventory_quantity,
+                    inv_item["id"],
+                    new_qty
+                )
+
+    async def _async_db_insert(self, data):
+        try:
+            # Insert order
+            await asyncio.to_thread(insert_mock_order, data)
+            # Consume inventory
+            await self._consume_inventory_for_order(data)
+        except Exception as e:
+            logger.error(f"[DB Error] Failed to process order: {e}")
+
+    async def broadcast_state(self):
+        # Broadcast Payload Structure for frontend SSE consumption
+        payload = {
+            "simulated_time": self.simulated_time.strftime("%Y-%m-%d %H:%M"),
+            "is_paused": self.is_paused,
+            "queue_length": len(self.active_order_queue),
+            "velocity": SYSTEM_STATE.get("order_velocity_multiplier", 1.0)
+        }
+        message = json.dumps(payload)
+        
+        # Push to SSE clients
+        async with self._sse_lock:
+            for queue in self.sse_clients:
+                try:
+                    await queue.put(message)
+                except Exception as e:
+                    logger.error(f"SSE broadcast error: {e}")
+
+    
     async def run_loop(self):
         self.is_running = True
-        self.menu_cache = get_active_menu()
+        self.menu_cache = await asyncio.to_thread(get_active_menu)
         print("🌍 [World Engine] Started. 1 tick = 30 sim minutes.")
         
         while self.is_running:
@@ -40,7 +121,7 @@ class WorldSimulationEngine:
                 self.simulated_time += timedelta(minutes=self.tick_sim_min)
 
                 if self.tick_count % 10 == 0:
-                    self.menu_cache = get_active_menu()   # Refresh menu to retrieve agent updates in every 10 ticks
+                    self.menu_cache = await asyncio.to_thread(get_active_menu)   # Refresh menu to retrieve agent updates in every 10 ticks
                 
                 # 2. Dynamically generate orders based on Velocity in God Mode
                 velocity = SYSTEM_STATE.get("order_velocity_multiplier", 1.0)
@@ -62,26 +143,6 @@ class WorldSimulationEngine:
 
             # Sleep for real seconds before next tick
             await asyncio.sleep(self.tick_real_sec)
-
-    async def _async_db_insert(self, data):
-        try:
-            insert_mock_order(data)
-        except Exception as e:
-            print(f"[DB Error] Failed to inject order: {e}")
-
-    async def broadcast_state(self):
-        # Broadcast Payload Structure for frontend SSE consumption
-        payload = {
-            "simulated_time": self.simulated_time.strftime("%Y-%m-%d %H:%M"),
-            "is_paused": self.is_paused,
-            "queue_length": len(self.active_order_queue),
-            "velocity": SYSTEM_STATE.get("order_velocity_multiplier", 1.0)
-        }
-        message = json.dumps(payload)
-        
-        # Push to SSE clients
-        for queue in self.sse_clients:
-            await queue.put(message)
 
 # Object instantiation
 world_engine = WorldSimulationEngine()
