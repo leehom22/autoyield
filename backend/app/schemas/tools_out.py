@@ -15,11 +15,16 @@ class FinanceState(BaseModel):
     daily_revenue: float
     current_margin_avg: float
     burn_rate: float
+    weekly_revenue: Optional[float] = None
+    weekly_margin: Optional[float] = None
+    inventory_total_value: Optional[float] = None
 
 class OpsState(BaseModel):
     active_staff_count: int
     pending_orders: int
     kitchen_load_percent: float
+    staff_shortage_risk: Optional[Literal["low", "medium", "high"]] = None
+    bottleneck_role: Optional[str] = None
 
 class GetBusinessStateOutput(BaseModel):
     """Output for get_business_state"""
@@ -43,6 +48,8 @@ class ParseUnstructuredSignalOutput(BaseModel):
 class MarketIndicator(BaseModel):
     value: float
     trend: Literal["up", "down"]
+    volatility: Optional[float] = None          
+    predicted_value: Optional[float] = None
 
 class FxRate(BaseModel):
     rate: float
@@ -50,6 +57,7 @@ class FxRate(BaseModel):
 class MarketData(BaseModel):
     oil: Optional[MarketIndicator] = None
     fx: Optional[FxRate] = None
+    inflation: Optional[MarketIndicator] = None
 
 class QueryMacroContextOutput(BaseModel):
     """Output for query_macro_context"""
@@ -65,12 +73,17 @@ class SimulateYieldScenarioOutput(BaseModel):
     projected_revenue_change: float
     new_margin: float
     break_even_volume_increase: float
+    projected_profit_change: Optional[float] = None
+    recommended_action: Optional[str] = None
+    elasticity_factor: Optional[float] = None
 
 class SupplyChainOption(BaseModel):
     supplier_id: str
     total_landed_cost: float
     reliability_index: float  # 0.0 - 1.0
     estimated_delivery: float # in hours
+    lead_time_risk: Optional[Literal["low", "medium", "high"]] = None
+    historical_on_time_rate: Optional[float] = None
 
 class EvaluateSupplyChainOptionsOutput(BaseModel):
     """Output for evaluate_supply_chain_options"""
@@ -81,6 +94,8 @@ class CheckOperationalCapacityOutput(BaseModel):
     is_feasible: bool
     bottleneck_risk: Literal["high", "low"]
     recommended_staff_addition: int
+    bottleneck_role: Optional[str] = None
+    detail_analysis: Optional[str] = None
 
 
 # ==========================================
@@ -98,6 +113,8 @@ class FormulateMarketingStrategyOutput(BaseModel):
     campaign_id: str
     activation_timestamp: str
     estimated_reach: int
+    estimated_roi: Optional[float] = None
+    recommended_audience: Optional[str] = None
 
 class SendHumanNotificationOutput(BaseModel):
     """Output for send_human_notification"""
@@ -114,6 +131,7 @@ class GeneratePostMortemLearningOutput(BaseModel):
     lesson_learned: str
     embedding_id: str
     strategy_adjustment: str
+    similarity_score: Optional[float] = None
 
 class NewsArticle(BaseModel):
     headline: str

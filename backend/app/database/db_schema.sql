@@ -285,6 +285,37 @@ INSERT INTO agent_permissions (id)
 SELECT uuid_generate_v4()
 WHERE NOT EXISTS (SELECT 1 FROM agent_permissions);
 
+
 -- ======================================================
--- End of Schema
+-- Refinement
 -- ======================================================
+
+-- Fill up inventory pricing history fields
+ALTER TABLE inventory_pricing_history 
+ADD COLUMN IF NOT EXISTS current_price DECIMAL(10,2);
+
+-- Create Vector Similarity Query RPC for generate_post_mortem_learning
+CREATE OR REPLACE FUNCTION match_knowledge_base (
+  query_embedding vector(1536),
+  match_threshold float,
+  match_count int
+)
+RETURNS TABLE (
+  id uuid,
+  scenario_description text,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    kb.id,
+    kb.scenario_description,
+    1 - (kb.embedding_vector <=> query_embedding) AS similarity
+  FROM knowledge_base kb
+  WHERE 1 - (kb.embedding_vector <=> query_embedding) > match_threshold
+  ORDER BY similarity DESC
+  LIMIT match_count;
+END;
+$$;

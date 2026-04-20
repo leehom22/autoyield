@@ -35,6 +35,7 @@ class SimulateYieldScenarioInput(BaseModel):
     item_id: str = Field(..., description="Target menu item ID.") 
     action: Literal["discount", "bundle"] = Field(..., description="Action to simulate.") 
     value: float = Field(..., description="Numerical value for the action (e.g., discount percentage).") 
+    bundle_items: Optional[List[str]] = Field(None, description="List of item IDs for bundle")
 
 class EvaluateSupplyChainOptionsInput(BaseModel):
     """Compares different suppliers based on unit_cost vs. reliability_score + logistics_surcharge. [cite: 37]"""
@@ -52,7 +53,7 @@ class CheckOperationalCapacityInput(BaseModel):
 
 class ActionPayload(BaseModel):
     target_id: str 
-    new_value: Any 
+    new_value: Any
 
 class ExecuteOperationalActionInput(BaseModel):
     """The primary write-tool for UPDATE_MENU, CREATE_PURCHASE_ORDER, or INVENTORY_CORRECTION."""
@@ -94,6 +95,7 @@ class GeneratePostMortemLearningInput(BaseModel):
     """Compares expected_yield vs. actual_yield and writes the Lesson."""
     event_id: str = Field(..., description="The ID of the decision/campaign being evaluated.") 
     actual_outcome: ActualOutcome
+    expected_outcome: Optional['ActualOutcome'] = None
 
 class FetchMacroNewsInput(BaseModel):
     """Fetches real-time macro news and festival context."""

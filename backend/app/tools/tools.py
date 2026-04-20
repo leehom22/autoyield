@@ -21,9 +21,9 @@ async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateO
     scope: 'inventory' | 'finance' | 'ops'
     """
     scope = params.scope
+    now = datetime.now(timezone.utc)
     
     if scope == "inventory":
-        now = datetime.now(timezone.utc)
         res = supabase.table("inventory").select("id, name, qty, expiry_timestamp").execute()
         
         items = []
@@ -41,31 +41,47 @@ async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateO
         return GetBusinessStateOutput(inventory=items)
 
     elif scope == "finance":
-        today = datetime.now().date().isoformat()
+        today = now.date().isoformat()
         res = supabase.table("orders").select("total_revenue, total_margin").gte("timestamp", today).execute()
-        
         total_rev = sum(r["total_revenue"] for r in res.data)
         total_mar = sum(r["total_margin"] for r in res.data)
         margin_avg = (total_mar / total_rev) if total_rev > 0 else 0.0
-        
+
+        week_ago = (now - timedelta(days=7)).date().isoformat()
+        res_week = supabase.table("orders").select("total_revenue, total_margin").gte("timestamp", week_ago).execute()
+        weekly_rev = sum(r["total_revenue"] for r in res_week.data)
+        weekly_mar = sum(r["total_margin"] for r in res_week.data)
+        weekly_margin_avg = (weekly_mar / weekly_rev) if weekly_rev > 0 else 0.0
+
+        inv_res = supabase.table("inventory").select("qty, unit_cost").execute()
+        total_inv_value = sum(float(i["qty"]) * float(i["unit_cost"]) for i in inv_res.data)
+
         return GetBusinessStateOutput(finance=FinanceState(
-            daily_revenue=round(total_rev, 2),
-            current_margin_avg=round(margin_avg, 2),
-            burn_rate=250.0 
+            daily_revenue=round(total_rev, 2), current_margin_avg=round(margin_avg, 2), burn_rate=250.0,
+            weekly_revenue=round(weekly_rev, 2), weekly_margin=round(weekly_margin_avg, 2), inventory_total_value=round(total_inv_value, 2)
         ))
 
     elif scope == "ops":
         roster = supabase.table("staff_roster").select("current_load").execute()
         avg_load = sum(r["current_load"] for r in roster.data) / len(roster.data) if roster.data else 0.0
+        shortage_risk, bottleneck_role = "low", None
+        for r in roster.data:
+            load_ratio = r["current_load"] / r["max_capacity_score"] if r["max_capacity_score"] else 0
+            if load_ratio > 0.9:
+                shortage_risk, bottleneck_role = "high", r["role"]
+                break
+            elif load_ratio > 0.75:
+                shortage_risk = "medium"
+
         try:
             from app.engine.simulator import world_engine
             pending = len(world_engine.active_order_queue)
         except (ImportError, AttributeError):
             pending = random.randint(5, 15)
+            
         return GetBusinessStateOutput(ops=OpsState(
-            active_staff_count=len(roster.data),
-            pending_orders=pending, 
-            kitchen_load_percent=round(avg_load * 100, 2)
+            active_staff_count=len(roster.data), pending_orders=pending, kitchen_load_percent=round(avg_load * 100, 2),
+            staff_shortage_risk=shortage_risk, bottleneck_role=bottleneck_role
         ))
 
 @tool
@@ -110,7 +126,6 @@ async def query_macro_context(params: QueryMacroContextInput) -> QueryMacroConte
 # Phase 2: Reasoning & Simulation
 # ==========================================
 
-# Can be upgraded
 @tool
 async def simulate_yield_scenario(params: SimulateYieldScenarioInput) -> SimulateYieldScenarioOutput:
     """
@@ -126,22 +141,32 @@ async def simulate_yield_scenario(params: SimulateYieldScenarioInput) -> Simulat
     current_price = float(item["current_price"])
     cost = current_price * (1.0 - float(item["margin_percent"]) / 100.0)
     
-    new_price = current_price * (1.0 - params.value) if params.action == "discount" else current_price
+    new_price = current_price * (1.0 - params.value) if params.action == "discount" else (params.value if params.value else current_price)
     new_margin = ((new_price - cost) / new_price) * 100 if new_price > 0 else 0
     
     # Equilibrium point between profit and cost
     original_profit = current_price - cost
     new_profit = new_price - cost
+    be_increase = 999.0 if new_profit <= 0 else original_profit / new_profit
     
-    if new_profit <= 0:
-        be_increase = 999.0   # Theoretically infinite increase needed to break even, but we cap it for sanity
+    elasticity = -1.2 # Hardcoded elasticity for hackathon predictability
+    price_change_pct = (new_price - current_price) / current_price
+    projected_profit_change = new_profit - original_profit 
+
+    if new_margin > float(item["margin_percent"]):
+        recommended = "increase_price"
+    elif new_margin < float(item["margin_percent"]) - 5:
+        recommended = "discount_acceptable"
     else:
-        be_increase = original_profit / new_profit
+        recommended = "maintain"
     
     return SimulateYieldScenarioOutput(
         projected_revenue_change=round(new_price - current_price, 2),
         new_margin=round(new_margin, 2),
-        break_even_volume_increase=round(be_increase, 2)
+        break_even_volume_increase=round(be_increase, 2),
+        projected_profit_change=round(projected_profit_change, 2),
+        recommended_action=recommended,
+        elasticity_factor=round(elasticity, 2)
     )
 
 @tool
@@ -205,7 +230,7 @@ async def execute_operational_action(params: ExecuteOperationalActionInput) -> E
         payload: { target_id, new_value }
     """
 
-    allowed, reason = check_action_permission(params.action_type, params.payload.dict())
+    allowed, reason = check_action_permission(params.action_type, params.payload.model_dump())
     if not allowed:
         if "Approval required" in reason:
             # Create notification, request for approval
@@ -214,7 +239,7 @@ async def execute_operational_action(params: ExecuteOperationalActionInput) -> E
                 "notification_id": notif_id,
                 "priority": "high",
                 "message": reason,
-                "proposed_action": params.dict(),
+                "proposed_action": params.model_dump(),
                 "status": "pending",
                 "is_read": False
             }).execute()
@@ -246,12 +271,22 @@ async def execute_operational_action(params: ExecuteOperationalActionInput) -> E
         if params.action_type == "UPDATE_MENU":
             supabase.table("menu_items").update(params.payload.new_value).eq("id", params.payload.target_id).execute()
             status = "success"
+
         elif params.action_type == "CREATE_PO":
-            supabase.table("procurement_logs").insert(params.payload.new_value).execute()
+            po = params.payload.new_value
+            supplier_id = po.get("supplier_id")
+            if supplier_id:
+                sup_res = supabase.table("suppliers").select("avg_lead_time").eq("id", supplier_id).execute()
+                if sup_res.data:
+                    arrival = datetime.now(timezone.utc) + timedelta(hours=sup_res.data[0]["avg_lead_time"])
+                    po["arrival_estimate"] = arrival.isoformat()
+            supabase.table("procurement_logs").insert(po).execute()
             status = "success"
+
         elif params.action_type == "INVENTORY_ADJUST":
             supabase.table("inventory").update(params.payload.new_value).eq("id", params.payload.target_id).execute()
             status = "success"
+
         elif params.action_type == "ALERT_KDS":
             supabase.table("kds_events").insert(params.payload.new_value).execute()
             status = "success"
@@ -336,20 +371,52 @@ async def generate_post_mortem_learning(params: GeneratePostMortemLearningInput)
     lesson = f"Event {params.event_id} yielded revenue {params.actual_outcome.revenue}."
     strategy = "Adjust weights towards P-Agent if revenue drop > 15%."
     
-    # Generate format of pgvector
-    zero_vector = [0.0] * 1536
+    if params.expected_outcome:
+        rev_diff = params.actual_outcome.revenue - params.expected_outcome.revenue
+        lesson += f" Expected revenue was {params.expected_outcome.revenue}, difference: {rev_diff:.2f}."
+
+    # Generate real embedding using Z.AI (GLM)
+    from app.core.config import settings
+    import httpx
     
+    try:
+        # Direct API call to GLM embedding model
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{settings.GLM_BASE_URL}/embeddings",
+                headers={"Authorization": f"Bearer {settings.GLM_API_KEY}"},
+                json={"model": "embedding-2", "input": lesson}
+            )
+            embedding = resp.json()["data"][0]["embedding"]
+    except Exception as e:
+        print(f"Embedding API error: {e}")
+        embedding = [0.0] * 1536
+
+    # Match and update/insert
+    similar = None
+    try:
+        similar = supabase.rpc("match_knowledge_base", {
+            "query_embedding": embedding, "match_threshold": 0.85, "match_count": 1
+        }).execute()
+    except Exception as e:
+        print(f"RPC match_knowledge_base failed (fallback to insert): {e}")
+    
+    if similar.data and similar.data[0]["similarity"] > 0.9:
+        best_match = similar.data[0]
+        supabase.table("knowledge_base").update({
+            "lesson_learned": lesson
+        }).eq("id", best_match["id"]).execute()
+        return GeneratePostMortemLearningOutput(lesson_learned=lesson, embedding_id=best_match["id"], strategy_adjustment=strategy, similarity_score=best_match["similarity"])
+
     supabase.table("knowledge_base").insert({
-        "embedding_vector": zero_vector,
-        "scenario_description": lesson,
-        "lesson_learned": strategy,
-        "performance_score": 0.85
+        "embedding_vector": embedding, "scenario_description": lesson, "lesson_learned": strategy, "performance_score": 0.85
     }).execute()
     
     return GeneratePostMortemLearningOutput(
         lesson_learned=lesson,
         embedding_id=f"mem_{str(uuid.uuid4())[:8]}",
-        strategy_adjustment=strategy
+        strategy_adjustment=strategy,
+        similarity_score=None
     )
 
 @tool
