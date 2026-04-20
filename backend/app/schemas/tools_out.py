@@ -21,6 +21,15 @@ class OpsState(BaseModel):
     pending_orders: int
     kitchen_load_percent: float
 
+class MenuItem(BaseModel):
+    item_id: str
+    name: str
+    category: str
+    current_price: float
+    margin_percent: float
+    is_available: bool
+    primary_ingredient_id: Optional[str] = None  # links back to inventory for stock checks
+
 class GetBusinessStateOutput(BaseModel):
     """Output for get_business_state"""
     inventory: Optional[List[InventoryItemRisk]] = None
@@ -112,4 +121,102 @@ class GeneratePostMortemLearningOutput(BaseModel):
     """Output for generate_post_mortem_learning"""
     lesson_learned: str
     embedding_id: str
-    strategy_adjustment: str
+    strategy_adjustment: str 
+    
+
+# * Newly added
+class MenuItem(BaseModel):
+    item_id: str
+    name: str
+    category: str
+    current_price: float
+    margin_percent: float
+    is_available: bool
+    primary_ingredient_id: Optional[str] = None  # links back to inventory for stock checks
+ 
+class GetAllMenuItemsOutput(BaseModel):
+    """Output for get_all_menu_items"""
+    items: List[MenuItem]
+    total_count: int
+ 
+ 
+# ==========================================
+# contact_supplier
+# ==========================================
+ 
+class ContactSupplierOutput(BaseModel):
+    """Output for contact_supplier"""
+    status: Literal["sent", "failed", "queued"]
+    contact_log_id: str          # FK into supplier_contact_logs table
+    supplier_name: str
+    channel_used: Literal["email", "whatsapp", "sms", "logged_only"]
+    message_preview: str         # first 120 chars of sent message
+    expected_response_hrs: int   # SLA estimate based on supplier's avg_lead_time
+ 
+ 
+# ==========================================
+# save_to_kds_table
+# ==========================================
+ 
+class SaveToKdsOutput(BaseModel):
+    """Output for save_to_kds"""
+    kds_entry_id: str
+    status: Literal["displayed", "queued", "failed"]
+    eta_timestamp: str           # ISO timestamp = now + estimated_prep_minutes
+    position_in_queue: int       # 1 = next up, higher = further back
+ 
+ 
+# ==========================================
+# get_all_orders
+# ==========================================
+ 
+class OrderRecord(BaseModel):
+    order_id: str
+    timestamp: str
+    items: list                  # raw JSONB from DB
+    total_revenue: float
+    total_margin: float
+    status: str
+ 
+class GetAllOrdersOutput(BaseModel):
+    """Output for get_all_orders"""
+    orders: List[OrderRecord]
+    total_revenue_sum: float
+    total_count: int
+ 
+ 
+# ==========================================
+# get_festival_calendar
+# ==========================================
+ 
+class FestivalEvent(BaseModel):
+    name: str
+    date: str                    # ISO date
+    days_away: int
+    type: Literal["public_holiday", "religious", "cultural"]
+    demand_impact: Optional[str] = None   # e.g. "+40% noodle dishes, -60% pork items"
+    staffing_note: Optional[str] = None  # e.g. "Muslim staff may request leave"
+ 
+class GetFestivalCalendarOutput(BaseModel):
+    """Output for get_festival_calendar"""
+    events: List[FestivalEvent]
+    nearest_event_days_away: int
+ 
+ 
+# ==========================================
+# query_macro_context (upgraded)
+# ==========================================
+ 
+class MacroIndicatorLive(BaseModel):
+    indicator: str
+    value: Optional[float]       # None if only qualitative data available
+    trend: Literal["up", "down", "stable"]
+    confidence: Literal["high", "medium", "low"]
+    news_summary: Optional[str]  # 1-sentence GLM digest of latest headline
+    source_url: Optional[str]    # URL of the article used
+ 
+class QueryMacroContextOutput(BaseModel):
+    """Output for query_macro_context (upgraded — live news)"""
+    results: List[MacroIndicatorLive]
+    overall_risk_level: Literal["low", "elevated", "high"]
+    agent_recommendation: str    # e.g. "Oil trending up — apply 15% logistics surcharge to all POs"

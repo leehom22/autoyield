@@ -46,6 +46,7 @@ CREATE TABLE menu_items (
 
 -- Orders (unchanged)
 DROP TABLE IF EXISTS orders CASCADE;
+-- add order_date
 CREATE TABLE orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     items JSONB,
