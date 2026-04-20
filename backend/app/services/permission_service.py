@@ -49,7 +49,7 @@ def check_action_permission(action_type: str, payload: dict) -> tuple[bool, str]
         # Caclculate the total value involved in invoice
         new_val = payload.get("new_value", {})
         qty = new_val.get("qty", 0)
-        unit_cost = new_val.get("unit_cost", 0)
+        unit_cost = new_val.get("unit_cost") or new_val.get("unit_price", 0)
         total = float(qty) * float(unit_cost)
         max_spend = float(cfg.get("max_spend_amount", 500))
         if total > max_spend:

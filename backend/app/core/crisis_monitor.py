@@ -4,18 +4,24 @@ from app.core.supabase import supabase
 from app.core.state import SYSTEM_STATE
 from app.engine.simulator import world_engine
 from langchain_core.messages import HumanMessage
+from app.core.config import settings
 
 # Avoid agent from being triggered when handling crisis
-REAL_COOLDOWN_SECONDS = 30
-
 _last_trigger_real_time = {}
+_trigger_lock = asyncio.Lock()
 
-def _can_trigger(crisis_type: str) -> bool:
-    last = _last_trigger_real_time.get(crisis_type)
-    if last is None:
-        return True
-    elapsed = (datetime.now() - last).total_seconds()
-    return elapsed >= REAL_COOLDOWN_SECONDS
+async def _can_trigger_and_record(crisis_type: str) -> bool:
+    async with _trigger_lock:
+        now = datetime.now()
+        last = _last_trigger_real_time.get(crisis_type)
+        if last is None:
+            _last_trigger_real_time[crisis_type] = now
+            return True
+        elapsed = (now - last).total_seconds()
+        if elapsed >= settings.CRISIS_COOLDOWN_SECONDS:
+            _last_trigger_real_time[crisis_type] = now
+            return True
+        return False
 
 def _record_trigger(crisis_type: str):
     _last_trigger_real_time[crisis_type] = datetime.now()
@@ -64,7 +70,7 @@ async def check_and_trigger_crisis(app):
     # 1. Inventory crisis
     inv_res = supabase.table("inventory").select("id, name, qty, min_stock_level").execute()
     low_stock_items = [i for i in inv_res.data if i["qty"] < i["min_stock_level"]]
-    if low_stock_items and _can_trigger("inventory_crisis"):
+    if low_stock_items and await _can_trigger_and_record("inventory_crisis"):
         _record_trigger("inventory_crisis")
         item_names = [i["name"] for i in low_stock_items[:3]]
         msg = f"Inventory crisis: {len(low_stock_items)} items below minimum stock. Examples: {', '.join(item_names)}."
@@ -76,7 +82,7 @@ async def check_and_trigger_crisis(app):
     if len(oil_history.data) >= 2:
         latest = oil_history.data[0]["value"]
         previous = oil_history.data[1]["value"]
-        if latest > previous * 1.15 and _can_trigger("oil_spike"):
+        if latest > previous * settings.OIL_PRICE_SPIKE_THRESHOLD and await _can_trigger_and_record("inventory_crisis"):
             _record_trigger("oil_spike")
             pct = (latest / previous - 1) * 100
             msg = f"Oil price spike: from {previous:.2f} to {latest:.2f} (+{pct:.0f}%)."
@@ -85,7 +91,7 @@ async def check_and_trigger_crisis(app):
     
     # 3. Abnormal Order Velocity
     velocity = SYSTEM_STATE.get("order_velocity_multiplier", 1.0)
-    if velocity > 3.0 and _can_trigger("order_surge"):
+    if velocity > 3.0 and await _can_trigger_and_record("inventory_crisis"):
         _record_trigger("order_surge")
         msg = f"Order velocity surge detected: current multiplier {velocity:.1f}x normal rate."
         await _call_agent(app, msg)

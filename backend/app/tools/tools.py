@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List
 
 from app.core.supabase import supabase
+from app.core.config import settings
 from app.schemas.tools_in import *
 from app.schemas.tools_out import *
 from langchain_core.tools import tool
@@ -57,7 +58,7 @@ async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateO
         total_inv_value = sum(float(i["qty"]) * float(i["unit_cost"]) for i in inv_res.data)
 
         return GetBusinessStateOutput(finance=FinanceState(
-            daily_revenue=round(total_rev, 2), current_margin_avg=round(margin_avg, 2), burn_rate=250.0,
+            daily_revenue=round(total_rev, 2), current_margin_avg=round(margin_avg, 2), burn_rate=settings.DEFAULT_BURN_RATE,
             weekly_revenue=round(weekly_rev, 2), weekly_margin=round(weekly_margin_avg, 2), inventory_total_value=round(total_inv_value, 2)
         ))
 
@@ -149,7 +150,7 @@ async def simulate_yield_scenario(params: SimulateYieldScenarioInput) -> Simulat
     new_profit = new_price - cost
     be_increase = 999.0 if new_profit <= 0 else original_profit / new_profit
     
-    elasticity = -1.2 # Hardcoded elasticity for hackathon predictability
+    elasticity = settings.DEFAULT_ELASTICITY   # Hardcoded elasticity for hackathon predictability
     price_change_pct = (new_price - current_price) / current_price
     projected_profit_change = new_profit - original_profit 
 
@@ -185,7 +186,7 @@ async def evaluate_supply_chain_options(params: EvaluateSupplyChainOptionsInput)
     options = []
     for s in res.data:
         # Cost = base cost + logistic surcharge (higher if reliability is low)
-        logistics_surcharge = base_cost * (1.0 - s["reliability_score"]) * 0.5
+        logistics_surcharge = base_cost * (1.0 - s["reliability_score"]) * settings.LOGISTICS_SURCHARGE_FACTOR
         total_landed_cost = base_cost + logistics_surcharge
         options.append(SupplyChainOption(
             supplier_id=s["id"],

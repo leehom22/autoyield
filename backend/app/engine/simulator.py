@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from app.core.state import SYSTEM_STATE
 from app.services.order_service import generate_random_order
 from app.services.db_service import get_active_menu, insert_mock_order, get_inventory_item, update_inventory_quantity
+from app.core.config import settings
 import random
 import logging
 
@@ -14,8 +15,8 @@ class WorldSimulationEngine:
         self.is_running = False
         self.is_paused = False       # True when agent is reasoning
         self.simulated_time = datetime.now()   # Start with real current time
-        self.tick_real_sec = 1.0     # 1s in real world
-        self.tick_sim_min = 30       # Simulate 30 minutes per tick
+        self.tick_real_sec = settings.SIM_TICK_REAL_SEC     # 1s in real world
+        self.tick_sim_min = settings.SIM_TICK_SIM_MIN       # Simulate 30 minutes per tick
         self.tick_count = 0
         self.menu_cache = []
         self.active_order_queue = []   # Pending orders in the simulated world
@@ -125,7 +126,7 @@ class WorldSimulationEngine:
                 
                 # 2. Dynamically generate orders based on Velocity in God Mode
                 velocity = SYSTEM_STATE.get("order_velocity_multiplier", 1.0)
-                num_to_generate = int(2 * velocity * random.uniform(0.8, 1.2))   # Base 2 orders per tick, scaled by velocity
+                num_to_generate = int(settings.SIM_BASE_ORDERS_PER_TICK * velocity * random.uniform(0.8, 1.2))   # Base 2 orders per tick, scaled by velocity
                 
                 for _ in range(num_to_generate):
                     order_payload = generate_random_order(self.simulated_time)
@@ -135,7 +136,7 @@ class WorldSimulationEngine:
                         asyncio.create_task(self._async_db_insert(order_payload))
 
                 # 3. Simulate order processing (Default as 3 orders per tick)
-                process_capacity = 3
+                process_capacity = settings.SIM_ORDER_PROCESS_CAPACITY
                 self.active_order_queue = self.active_order_queue[process_capacity:]
 
                 # 4. Broadcast current state to SSE clients

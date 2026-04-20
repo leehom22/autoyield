@@ -1,6 +1,7 @@
 from typing import Dict, Any, List
 from app.core.supabase import supabase
 from app.services.db_service import get_inventory_status
+from datetime import datetime, timezone, timedelta
 
 async def execute_invoice_crud(invoice_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -59,8 +60,26 @@ async def execute_invoice_crud(invoice_data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Update inventory quantity (add received stock)
         current_qty = inv_item["qty"]
+        current_cost = float(inv_item["unit_cost"]) if inv_item.get("unit_cost") else 0.0
         new_qty = current_qty + qty
-        supabase.table("inventory").update({"qty": new_qty}).eq("id", item_id).execute()
+        if new_qty > 0:
+            new_unit_cost = (current_qty * current_cost + qty * unit_cost) / new_qty
+        else:
+            new_unit_cost = unit_cost
+
+        # Update inventory
+        supabase.table("inventory").update({
+            "qty": new_qty,
+            "unit_cost": round(new_unit_cost, 2)
+        }).eq("id", item_id).execute()
+
+        # Record pricing history
+        supabase.table("inventory_pricing_history").insert({
+            "inventory_id": item_id,
+            "unit_cost": round(new_unit_cost, 2),
+            "current_price": inv_item.get("current_price"),  # Keep original or update new
+            "effective_from": datetime.now(timezone.utc).isoformat()
+        }).execute()
     
     return {
         "status": "success" if items_processed > 0 else "no_items_processed",

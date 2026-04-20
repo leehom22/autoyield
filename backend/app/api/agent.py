@@ -10,6 +10,8 @@ from app.services.invoice_extractor import extract_invoice_data
 from app.services.db_service import get_inventory_status
 from app.core.config import settings
 
+MAX_FILE_SIZE = 5 * 1024 * 1024   # Maximum 5MB file input
+
 router = APIRouter()
 
 # =========== Agent Interaction Endpoints ============
@@ -19,6 +21,10 @@ async def upload_invoice(
     request: Request,
     file: UploadFile = File(...)
 ):
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File too large. Max {MAX_FILE_SIZE // (1024*1024)}MB")
+    
     app = request.app
     graph = app.state.graph
     

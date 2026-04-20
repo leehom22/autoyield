@@ -1,6 +1,7 @@
 import json
 from typing import Dict, Any, Optional, List
 from app.core.glm_client import glm_client
+import re
 
 INVOICE_EXTRACT_PROMPT = """
 You are a restaurant invoice parser for AutoYield. Extract structured data from this invoice image.
@@ -39,8 +40,12 @@ async def extract_invoice_data(image_data_url: str) -> Dict[str, Any]:
     """
     try:
         response = await glm_client.vision_completion(image_data_url, INVOICE_EXTRACT_PROMPT)
-        # Clean markdown code blocks if present
-        cleaned = response.replace("```json", "").replace("```", "").strip()
+        # Clean markdown code blocks if present (robust version)
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        if json_match:
+            cleaned = json_match.group(0)
+        else:
+            cleaned = response.replace("```json", "").replace("```", "").strip()
         data = json.loads(cleaned)
     except Exception as e:
         print(f"Invoice extraction error: {e}")
