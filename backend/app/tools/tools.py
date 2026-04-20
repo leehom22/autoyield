@@ -3,6 +3,7 @@ import random
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List
+import httpx
 
 from app.services.glm_parser import parse_unstructured_signal as _parse_unstructured_signal
 from app.core.supabase import supabase
@@ -317,6 +318,7 @@ async def generate_post_mortem_learning(params: GeneratePostMortemLearningInput)
 # TOOL 1 — get_all_menu_items
 # ─────────────────────────────────────────────────────────────
  
+# ! Fix: 'menu_items' and 'inventory' is linked through 'ingredients' column [{qty:double,item_name:string}] 
 @tool
 async def get_all_menu_items(params: GetAllMenuItemsInput) -> GetAllMenuItemsOutput:
     """
@@ -552,11 +554,11 @@ async def get_all_orders(params: GetAllOrdersInput) -> GetAllOrdersOutput:
     - Campaign measurement: date_from=campaign_start, date_to=campaign_end
     """
     query = supabase.table("orders").select(
-        "id, timestamp, items, total_revenue, total_margin, status"
+        "id, timestamp, items, total_revenue, total_margin, order_status"
     )
  
     if params.status_filter:
-        query = query.eq("status", params.status_filter)
+        query = query.eq("order_status", params.status_filter)
  
     if params.date_from:
         query = query.gte("timestamp", params.date_from)
@@ -574,7 +576,7 @@ async def get_all_orders(params: GetAllOrdersInput) -> GetAllOrdersOutput:
             items=row["items"] or [],
             total_revenue=float(row["total_revenue"]),
             total_margin=float(row["total_margin"]),
-            status=row["status"],
+            status=row["order_status"],
         )
         for row in res.data
     ]
