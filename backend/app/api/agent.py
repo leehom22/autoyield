@@ -1,11 +1,10 @@
 from app.schemas.payloads import ChatbotInstructionPayload, DocumentAssetPayload
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from typing import Optional
 import base64
 from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException
 from typing import Optional
 import base64
-from backend.main import app
 from langchain_core.messages import HumanMessage
 from app.services.invoice_extractor import extract_invoice_data
 from app.services.db_service import get_inventory_status
@@ -17,8 +16,11 @@ router = APIRouter()
 
 @router.post("/invoice")
 async def upload_invoice(
-    file: UploadFile = File(...),
+    request: Request,
+    file: UploadFile = File(...)
 ):
+    app = request.app
+    graph = app.state.graph
     
     # Read and Parse Invoice Image
     contents = await file.read()

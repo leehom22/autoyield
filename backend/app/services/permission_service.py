@@ -1,4 +1,3 @@
-# app/services/permission_service.py
 from cachetools import TTLCache
 from app.core.supabase import supabase
 

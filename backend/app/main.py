@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import supabase
+from app.core.supabase import supabase
 
 from app.graph.graph import get_graph
 from langchain_core.messages import HumanMessage
@@ -17,7 +17,7 @@ from app.engine.simulator import world_engine
 from app.api import stream, sandbox, agent, webhook
 from app.core.scheduler import start_scheduler
 from app.api import chat
-from app.api import permissions
+from app.api import permission
 
 # ─────────────────────────────────────────────
 # Request / Response models
@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI):
     
     # Initialize the Agent Graph globally once
     app.state.graph = get_graph()
+    start_scheduler(app.state.graph)
     
     yield
     
@@ -110,7 +111,7 @@ app.include_router(sandbox.router, prefix="/api/sandbox", tags=["God Mode"])
 app.include_router(agent.router, prefix="/api/agent", tags=["Agent Interact"])
 app.include_router(webhook.router, prefix="/api/webhooks", tags=["Internal Triggers"])
 app.include_router(stream.router, prefix="/api/stream", tags=["SSE Streaming"])
-app.include_router(permissions.router, prefix="/api/permissions", tags=["Authorization Panel"])
+app.include_router(permission.router, prefix="/api/permissions", tags=["Authorization Panel"])
 
 @app.get("/health", tags=["System"])
 async def health():

@@ -198,7 +198,7 @@ async def check_operational_capacity(params: CheckOperationalCapacityInput) -> C
 # Phase 3: Execution
 # ==========================================
 @tool
-def execute_operational_action(params: ExecuteOperationalActionInput) -> ExecuteOperationalActionOutput:
+async def execute_operational_action(params: ExecuteOperationalActionInput) -> ExecuteOperationalActionOutput:
     """
         Write tool — executes UPDATE_MENU, CREATE_PO (purchase order), or INVENTORY_ADJUST.
         action_type: 'UPDATE_MENU' | 'CREATE_PO' | 'INVENTORY_ADJUST'

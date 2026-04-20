@@ -12,7 +12,6 @@ from mcp.client.sse import sse_client
 from contextlib import asynccontextmanager
 
 from fastmcp import FastMCP
-from db.client import get_supabase
 from typing import Dict
 
 mcp = FastMCP(

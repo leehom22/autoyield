@@ -1,8 +1,7 @@
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Request
 from app.schemas.payloads import GodModeVelocityPayload, GodModePayload
 from app.core.state import SYSTEM_STATE
 from app.core.supabase import supabase
-from backend.main import app
 from langchain_core.messages import HumanMessage
 
 
@@ -25,7 +24,10 @@ async def adjust_velocity(payload: GodModeVelocityPayload):
 
 # God Mode Crisis Trigger
 @router.post("/trigger-crisis")
-async def trigger_crisis(payload: GodModePayload):
+async def trigger_crisis(request: Request, payload: GodModePayload):
+
+    app = request.app
+    graph = app.state.graph
     
     # 1. Update inventory based on changing multiplier
     if payload.inventory_multiplier != 1.0:
