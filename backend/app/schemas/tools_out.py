@@ -89,7 +89,7 @@ class CheckOperationalCapacityOutput(BaseModel):
 
 class ExecuteOperationalActionOutput(BaseModel):
     """Output for execute_operational_action"""
-    status: Literal["success", "failed"]
+    status: Literal["success", "failed", "pending_approval"]
     transaction_id: str
     updated_state_digest: str
 
@@ -102,7 +102,7 @@ class FormulateMarketingStrategyOutput(BaseModel):
 class SendHumanNotificationOutput(BaseModel):
     """Output for send_human_notification"""
     notification_id: str
-    delivery_channel: Literal["admin_dashboard", "whatsapp"]
+    delivery_channel: Literal["admin_dashboard", "whatsapp", "email", "telegram"]
 
 
 # ==========================================
@@ -114,3 +114,12 @@ class GeneratePostMortemLearningOutput(BaseModel):
     lesson_learned: str
     embedding_id: str
     strategy_adjustment: str
+
+class NewsArticle(BaseModel):
+    headline: str
+    impact_level: Literal["high", "medium", "low"]
+    summary: str
+
+class FetchMacroNewsOutput(BaseModel):
+    """Output for fetch_macro_news"""
+    articles: List[NewsArticle]

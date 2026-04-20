@@ -1,7 +1,9 @@
 from fastapi import APIRouter, BackgroundTasks
 from app.schemas.payloads import GodModeVelocityPayload, GodModePayload
 from app.core.state import SYSTEM_STATE
-from app.graph.main_graph import get_main_graph
+from app.core.supabase import supabase
+from backend.main import app
+from langchain_core.messages import HumanMessage
 
 
 router = APIRouter()
@@ -20,38 +22,41 @@ async def adjust_velocity(payload: GodModeVelocityPayload):
         "trace": f"Velocity shifted: {old_v}x -> {payload.order_velocity_multiplier}x"
     }
 
-# Market Crisis (Inventory shock or Oil Price Surge)
+
+# God Mode Crisis Trigger
 @router.post("/trigger-crisis")
-async def trigger_crisis(payload: GodModePayload, background_tasks: BackgroundTasks):
-
-    main_graph = get_main_graph()
-
-    # TODO: 使用 supabase-py 客户端更新 market_trends 和 inventory 表
-    # 如果 payload.inventory_multiplier != 1.0: 批量更新库存
-    # 如果 payload.oil_price_multiplier != 1.0: 更新 market_trends
-
-    initial_state = {
-        "raw_content": f"Oil price changed by {payload.oil_price_multiplier}x, inventory multiplier {payload.inventory_multiplier}x. Analyze impact and propose actions.",
-        "input_type": "text",
-        "image_data_url": None,
-        "source": "god_mode",
-        "parsed_intent": "GENERAL_CRISIS",
-        "parsed_entities": {},
-        "parsed_autonomy": "L3",
-        "is_complete": True,
-        "missing_fields": [],
-        "target_agent": None,
-        "invoice_data": None,
-        "price_spike_detected": False,
-        "clerk_result": None,
-        "analysis_result": None,
-        "debate_context": {"trigger": "GOD_MODE_CRISIS"},
-        "debate_result": None,
-        "execution_result": None,
-        "final_response": "",
-        "messages": [],
-    }
+async def trigger_crisis(payload: GodModePayload):
     
-    background_tasks.add_task(main_graph.ainvoke, initial_state)
+    # 1. Update inventory based on changing multiplier
+    if payload.inventory_multiplier != 1.0:
+        if payload.inventory_target_id:
+            # Update specific item
+            supabase.table("inventory").update({"qty": supabase.raw(f"qty * {payload.inventory_multiplier}")}).eq("id", payload.inventory_target_id).execute()
+        else:
+            # Update all items as a whole
+            supabase.table("inventory").update({"qty": supabase.raw(f"qty * {payload.inventory_multiplier}")}).execute()
     
-    return {"status": "crisis_injected", "payload": payload.dict()}
+    # 2. Update market trend if multiplier provided
+    if payload.oil_price_multiplier != 1.0:
+        res = supabase.table("market_trends_history").select("value").eq("indicator", "oil_price").order("recorded_at", desc=True).limit(1).execute()
+        if res.data:
+            new_oil = res.data[0]["value"] * payload.oil_price_multiplier
+            supabase.table("market_trends_history").insert({"indicator": "oil_price", "value": new_oil}).execute()
+    
+    # 3. Call P/R Agent Graph for debate
+    graph = app.state.graph
+    result = await graph.ainvoke({
+        "messages": [HumanMessage(content=f"God Mode crisis: oil price multiplier {payload.oil_price_multiplier}, inventory multiplier {payload.inventory_multiplier}. Analyze impact and propose actions.")]
+    })
+    final_response = result.get("final_response", "")
+    
+    # Record debate outcome in DB decision logs
+    supabase.table("decision_logs").insert({
+        "trigger_signal": "GOD_MODE_CRISIS",
+        "p_agent_argument": result.get("p_agent_position", ""),
+        "r_agent_argument": result.get("r_agent_position", ""),
+        "resolution": "Debate completed",
+        "action_taken": final_response[:500],
+    }).execute()
+    
+    return {"status": "crisis_injected", "response": final_response}

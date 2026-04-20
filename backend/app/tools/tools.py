@@ -3,11 +3,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List
 
-from app.services.glm_parser import parse_unstructured_signal as _parse_unstructured_signal
 from app.core.supabase import supabase
 from app.schemas.tools_in import *
 from app.schemas.tools_out import *
 from langchain_core.tools import tool
+from app.services.permission_service import check_action_permission
 
 # ==========================================
 # Phase 1: Perception
@@ -92,18 +92,18 @@ async def query_macro_context(params: QueryMacroContextInput) -> QueryMacroConte
         fx=FxRate(rate=fx_data["current_value"] if fx_data else 4.72)
     ))
 
-@tool
-async def parse_unstructured_signal(params: ParseUnstructuredSignalInput) -> ParseUnstructuredSignalOutput:
-    """
-        Parse messy unstructured inputs (WhatsApp texts, OCR invoices, voice transcripts)
-        into structured JSON using pattern extraction.
-        content_type: 'text' | 'ocr_result' | 'stt_transcript'
-    """
-    return await _parse_unstructured_signal(
-        raw_content=params.raw_content,
-        input_type=params.type,
-        image_data_url=getattr(params, 'image_data_url', None)
-    )
+# @tool
+# async def parse_unstructured_signal(params: ParseUnstructuredSignalInput) -> ParseUnstructuredSignalOutput:
+#     """
+#         Parse messy unstructured inputs (WhatsApp texts, OCR invoices, voice transcripts)
+#         into structured JSON using pattern extraction.
+#         content_type: 'text' | 'ocr_result' | 'stt_transcript'
+#     """
+#     return await _parse_unstructured_signal(
+#         raw_content=params.raw_content,
+#         input_type=params.type,
+#         image_data_url=getattr(params, 'image_data_url', None)
+#     )
 
 
 # ==========================================
@@ -203,7 +203,33 @@ def execute_operational_action(params: ExecuteOperationalActionInput) -> Execute
         Write tool — executes UPDATE_MENU, CREATE_PO (purchase order), or INVENTORY_ADJUST.
         action_type: 'UPDATE_MENU' | 'CREATE_PO' | 'INVENTORY_ADJUST'
         payload: { target_id, new_value }
-        """
+    """
+
+    allowed, reason = check_action_permission(params.action_type, params.payload.dict())
+    if not allowed:
+        if "Approval required" in reason:
+            # Create notification, request for approval
+            notif_id = str(uuid.uuid4())
+            supabase.table("notifications").insert({
+                "notification_id": notif_id,
+                "priority": "high",
+                "message": reason,
+                "proposed_action": params.dict(),
+                "status": "pending",
+                "is_read": False
+            }).execute()
+            return ExecuteOperationalActionOutput(
+                status="pending_approval",
+                transaction_id=notif_id,
+                updated_state_digest="Action paused. Awaiting human approval."
+            )
+        else:
+            return ExecuteOperationalActionOutput(
+                status="failed",
+                transaction_id="",
+                updated_state_digest=f"Action rejected: {reason}"
+            )
+    
     status = "failed"
     action_log = f"{params.action_type} - {params.payload.target_id}"
     
@@ -225,6 +251,9 @@ def execute_operational_action(params: ExecuteOperationalActionInput) -> Execute
             status = "success"
         elif params.action_type == "INVENTORY_ADJUST":
             supabase.table("inventory").update(params.payload.new_value).eq("id", params.payload.target_id).execute()
+            status = "success"
+        elif params.action_type == "ALERT_KDS":
+            supabase.table("kds_events").insert(params.payload.new_value).execute()
             status = "success"
             
         if status == "success":
@@ -282,10 +311,15 @@ async def send_human_notification(params: SendHumanNotificationInput) -> SendHum
         "status": "pending",
         "is_read": False
     }).execute()
+
     print(f"⚠️ [Human Required] Priority: {params.priority} | Msg: {params.message}")
+
+    if params.channel in ["whatsapp", "email", "telegram"]:
+        print(f"📡 [External API] Simulating message dispatch via {params.channel.upper()} gateway...")
+
     return SendHumanNotificationOutput(
         notification_id=notification_id,
-        delivery_channel="admin_dashboard"
+        delivery_channel=params.channel if params.channel != "dashboard" else "admin_dashboard"
     )
 
 
@@ -317,3 +351,23 @@ async def generate_post_mortem_learning(params: GeneratePostMortemLearningInput)
         embedding_id=f"mem_{str(uuid.uuid4())[:8]}",
         strategy_adjustment=strategy
     )
+
+@tool
+async def fetch_macro_news(params: FetchMacroNewsInput) -> FetchMacroNewsOutput:
+    """
+        Fetch macro news (e.g., supply chain disruptions, festivals) to aid forward-looking reasoning.
+    """
+    # For Hackathon: Return highly relevant mock signals based on real business context
+    mock_news = [
+        NewsArticle(
+            headline="Monsoon season disrupts coastal logistics",
+            impact_level="high",
+            summary="Expect 20% delay and price spikes in seafood deliveries over the next 7 days."
+        ),
+        NewsArticle(
+            headline="Mother's Day weekend approaching",
+            impact_level="medium",
+            summary="Historical F&B data shows a 40% surge in family-style dining."
+        )
+    ]
+    return FetchMacroNewsOutput(articles=mock_news)

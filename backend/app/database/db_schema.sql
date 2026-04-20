@@ -260,6 +260,31 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 CREATE POLICY manager_all_notifications ON notifications USING (current_setting('request.jwt.claims', true)::json->>'user_role' = 'manager');
 CREATE POLICY staff_select_notifications ON notifications FOR SELECT USING (current_setting('request.jwt.claims', true)::json->>'user_role' = 'staff');
 
+
+-- ======================================================
+-- 11. Agent Permission
+-- ======================================================
+
+CREATE TABLE IF NOT EXISTS agent_permissions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    allow_auto_price_update BOOLEAN DEFAULT TRUE,
+    allow_auto_po_creation BOOLEAN DEFAULT TRUE,
+    allow_auto_inventory_adjust BOOLEAN DEFAULT TRUE,
+    allow_auto_marketing_campaign BOOLEAN DEFAULT FALSE,
+    max_price_change_percent FLOAT DEFAULT 15.0,
+    max_spend_amount DECIMAL(12,2) DEFAULT 500.00,
+    max_discount_percent FLOAT DEFAULT 30.0,
+    approval_mode_for_price_change TEXT DEFAULT 'require_approval',
+    approval_mode_for_po TEXT DEFAULT 'require_approval',
+    approval_mode_for_campaign TEXT DEFAULT 'require_approval',
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_by TEXT DEFAULT 'system'
+);
+
+INSERT INTO agent_permissions (id)
+SELECT uuid_generate_v4()
+WHERE NOT EXISTS (SELECT 1 FROM agent_permissions);
+
 -- ======================================================
 -- End of Schema
 -- ======================================================

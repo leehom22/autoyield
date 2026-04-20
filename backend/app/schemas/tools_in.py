@@ -56,7 +56,7 @@ class ActionPayload(BaseModel):
 
 class ExecuteOperationalActionInput(BaseModel):
     """The primary write-tool for UPDATE_MENU, CREATE_PURCHASE_ORDER, or INVENTORY_CORRECTION."""
-    action_type: Literal["UPDATE_MENU", "CREATE_PO", "INVENTORY_ADJUST"] 
+    action_type: Literal["UPDATE_MENU", "CREATE_PO", "INVENTORY_ADJUST", "ALERT_KDS"]
     payload: ActionPayload 
     p_logic_summary: str = Field(..., description="Reasoning trace from P-Agent.") 
     r_logic_summary: str = Field(..., description="Reasoning trace from R-Agent.") 
@@ -76,7 +76,10 @@ class SendHumanNotificationInput(BaseModel):
     """Requests Approve/Reject for high-stakes decisions."""
     priority: Literal["high", "medium"] 
     message: str = Field(..., description="Explanation to the human manager.") 
-    proposed_action_json: Dict[str, Any] = Field(..., description="The action awaiting approval.") 
+    proposed_action_json: Dict[str, Any] = Field(..., description="The action awaiting approval.")
+    channel: Optional[Literal["dashboard", "email", "whatsapp", "telegram"]] = Field(
+        default="dashboard", description="Delivery channel for the notification."
+    ) 
 
 
 # ==========================================
@@ -91,3 +94,7 @@ class GeneratePostMortemLearningInput(BaseModel):
     """Compares expected_yield vs. actual_yield and writes the Lesson."""
     event_id: str = Field(..., description="The ID of the decision/campaign being evaluated.") 
     actual_outcome: ActualOutcome
+
+class FetchMacroNewsInput(BaseModel):
+    """Fetches real-time macro news and festival context."""
+    query: str = Field(..., description="Keywords for news search (e.g., 'seafood supply', 'upcoming festivals')")

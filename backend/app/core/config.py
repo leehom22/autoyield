@@ -8,5 +8,6 @@ class Settings:
     GLM_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4"
     GLM_TEXT_MODEL: str = "glm-4-flash"   # Text Model
     GLM_VISION_MODEL: str = "glm-4v-plus"  # Visual Model
+    PRICE_SPIKE_THRESHOLD: float = 1.20
 
 settings = Settings()
