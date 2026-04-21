@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage
 from app.services.invoice_extractor import extract_invoice_data
 from app.services.db_service import get_inventory_status
 from app.core.config import settings
+from app.engine.simulator import get_current_simulated_time
 
 MAX_FILE_SIZE = 5 * 1024 * 1024   # Maximum 5MB file input
 
@@ -76,6 +77,7 @@ async def upload_invoice(
         from app.core.supabase import supabase
         supabase.table("decision_logs").insert({
             "trigger_signal": "INVOICE_PRICE_SPIKE",
+            "timestamp": get_current_simulated_time().isoformat(),
             "p_agent_argument": result.get("p_agent_position", ""),
             "r_agent_argument": result.get("r_agent_position", ""),
             "resolution": "Debate completed",

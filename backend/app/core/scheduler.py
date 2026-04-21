@@ -2,6 +2,7 @@ import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from langchain_core.messages import HumanMessage
 from app.core.supabase import supabase
+from app.engine.simulator import get_current_simulated_time
 
 scheduler = AsyncIOScheduler()
 
@@ -12,6 +13,7 @@ async def weekly_forecast(graph):
     final_response = result.get("final_response", "")
     supabase.table("decision_logs").insert({
         "trigger_signal": "WEEKLY_FORECAST",
+        "timestamp": get_current_simulated_time().isoformat(),
         "p_agent_argument": result.get("p_agent_position", ""),
         "r_agent_argument": result.get("r_agent_position", ""),
         "resolution": "Report generated",

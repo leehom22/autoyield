@@ -296,6 +296,7 @@ async def execute_operational_action(params: ExecuteOperationalActionInput) -> E
         if status == "success":
             supabase.table("decision_logs").insert({
                 "trigger_signal": params.action_type,
+                "timestamp": get_current_simulated_time().isoformat(),
                 "p_agent_argument": params.p_logic_summary,
                 "r_agent_argument": params.r_logic_summary,
                 "resolution": "Consensus Reached",
@@ -411,7 +412,11 @@ async def generate_post_mortem_learning(params: GeneratePostMortemLearningInput)
         return GeneratePostMortemLearningOutput(lesson_learned=lesson, embedding_id=best_match["id"], strategy_adjustment=strategy, similarity_score=best_match["similarity"])
 
     supabase.table("knowledge_base").insert({
-        "embedding_vector": embedding, "scenario_description": lesson, "lesson_learned": strategy, "performance_score": 0.85
+        "embedding_vector": embedding, 
+        "scenario_description": lesson, 
+        "lesson_learned": strategy, 
+        "performance_score": 0.85,
+        "created_at": get_current_simulated_time().isoformat()
     }).execute()
     
     return GeneratePostMortemLearningOutput(

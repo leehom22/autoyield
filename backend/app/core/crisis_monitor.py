@@ -44,6 +44,7 @@ async def _call_agent(app, crisis_msg: str):
         # Record decision log
         supabase.table("decision_logs").insert({
             "trigger_signal": "CRISIS_MONITOR",
+            "timestamp": get_current_simulated_time().isoformat(),
             "p_agent_argument": result.get("p_agent_position", ""),
             "r_agent_argument": result.get("r_agent_position", ""),
             "resolution": "Auto-triggered",
