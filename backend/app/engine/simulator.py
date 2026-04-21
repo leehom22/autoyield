@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.core.state import SYSTEM_STATE
 from app.services.order_service import generate_random_order
 from app.services.db_service import get_active_menu, insert_mock_order, get_inventory_item, update_inventory_quantity
@@ -14,7 +14,7 @@ class WorldSimulationEngine:
     def __init__(self):
         self.is_running = False
         self.is_paused = False       # True when agent is reasoning
-        self.simulated_time = datetime.now()   # Start with real current time
+        self.simulated_time = datetime(2026, 4, 20, 8, 0, tzinfo=timezone.utc)   # Start with 20/4 8a.m. 
         self.tick_real_sec = settings.SIM_TICK_REAL_SEC     # 1s in real world
         self.tick_sim_min = settings.SIM_TICK_SIM_MIN       # Simulate 30 minutes per tick
         self.tick_count = 0
@@ -144,6 +144,10 @@ class WorldSimulationEngine:
 
             # Sleep for real seconds before next tick
             await asyncio.sleep(self.tick_real_sec)
+
+    # For synchronize the global datetime
+    def get_current_simulated_time() -> datetime:
+        return world_engine.simulated_time
 
 # Object instantiation
 world_engine = WorldSimulationEngine()

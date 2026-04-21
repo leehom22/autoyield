@@ -9,11 +9,12 @@ from app.schemas.tools_in import *
 from app.schemas.tools_out import *
 from langchain_core.tools import tool
 from app.services.permission_service import check_action_permission
+from app.engine.simulator import get_current_simulated_time
+
 
 # ==========================================
 # Phase 1: Perception
 # ==========================================
-#TODO: Optimize docstrings
 
 @tool
 async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateOutput:
@@ -22,15 +23,15 @@ async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateO
     scope: 'inventory' | 'finance' | 'ops'
     """
     scope = params.scope
-    now = datetime.now(timezone.utc)
+    sim_now = get_current_simulated_time()
     
     if scope == "inventory":
         res = supabase.table("inventory").select("id, name, qty, expiry_timestamp").execute()
         
         items = []
         for row in res.data:
-            expiry = datetime.fromisoformat(row["expiry_timestamp"]) if row.get("expiry_timestamp") else (now + timedelta(days=365))
-            days_to_expiry = (expiry - now).days
+            expiry = datetime.fromisoformat(row["expiry_timestamp"]) if row.get("expiry_timestamp") else (sim_now + timedelta(days=365))
+            days_to_expiry = (expiry - sim_now).days
             risk_score = 1.0 if days_to_expiry <= 2 else max(0.0, 1.0 - (days_to_expiry / 10.0))
             
             items.append(InventoryItemRisk(
@@ -42,13 +43,13 @@ async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateO
         return GetBusinessStateOutput(inventory=items)
 
     elif scope == "finance":
-        today = now.date().isoformat()
+        today = sim_now.date().isoformat()
         res = supabase.table("orders").select("total_revenue, total_margin").gte("timestamp", today).execute()
         total_rev = sum(r["total_revenue"] for r in res.data)
         total_mar = sum(r["total_margin"] for r in res.data)
         margin_avg = (total_mar / total_rev) if total_rev > 0 else 0.0
 
-        week_ago = (now - timedelta(days=7)).date().isoformat()
+        week_ago = (sim_now - timedelta(days=7)).date().isoformat()
         res_week = supabase.table("orders").select("total_revenue, total_margin").gte("timestamp", week_ago).execute()
         weekly_rev = sum(r["total_revenue"] for r in res_week.data)
         weekly_mar = sum(r["total_margin"] for r in res_week.data)
@@ -279,7 +280,7 @@ async def execute_operational_action(params: ExecuteOperationalActionInput) -> E
             if supplier_id:
                 sup_res = supabase.table("suppliers").select("avg_lead_time").eq("id", supplier_id).execute()
                 if sup_res.data:
-                    arrival = datetime.now(timezone.utc) + timedelta(hours=sup_res.data[0]["avg_lead_time"])
+                    arrival = get_current_simulated_time() + timedelta(hours=sup_res.data[0]["avg_lead_time"])
                     po["arrival_estimate"] = arrival.isoformat()
             supabase.table("procurement_logs").insert(po).execute()
             status = "success"
@@ -327,7 +328,7 @@ async def formulate_marketing_strategy(params: FormulateMarketingStrategyInput) 
     
     return FormulateMarketingStrategyOutput(
         campaign_id=str(uuid.uuid4()),
-        activation_timestamp=datetime.now().isoformat(),
+        activation_timestamp=get_current_simulated_time().isoformat(),
         estimated_reach=int(params.config.budget * 15)
     )
 

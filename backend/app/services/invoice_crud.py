@@ -2,6 +2,7 @@ from typing import Dict, Any, List
 from app.core.supabase import supabase
 from app.services.db_service import get_inventory_status
 from datetime import datetime, timezone, timedelta
+from app.engine.simulator import get_current_simulated_time
 
 async def execute_invoice_crud(invoice_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -78,7 +79,7 @@ async def execute_invoice_crud(invoice_data: Dict[str, Any]) -> Dict[str, Any]:
             "inventory_id": item_id,
             "unit_cost": round(new_unit_cost, 2),
             "current_price": inv_item.get("current_price"),  # Keep original or update new
-            "effective_from": datetime.now(timezone.utc).isoformat()
+            "effective_from": get_current_simulated_time().isoformat()
         }).execute()
     
     return {

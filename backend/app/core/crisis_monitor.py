@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from app.core.supabase import supabase
 from app.core.state import SYSTEM_STATE
-from app.engine.simulator import world_engine
+from app.engine.simulator import world_engine, get_current_simulated_time
 from langchain_core.messages import HumanMessage
 from app.core.config import settings
 
@@ -12,7 +12,7 @@ _trigger_lock = asyncio.Lock()
 
 async def _can_trigger_and_record(crisis_type: str) -> bool:
     async with _trigger_lock:
-        now = datetime.now()
+        now = get_current_simulated_time()
         last = _last_trigger_real_time.get(crisis_type)
         if last is None:
             _last_trigger_real_time[crisis_type] = now
