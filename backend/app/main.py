@@ -93,12 +93,9 @@ app.add_middleware(
 # ─────────────────────────────────────────────
 @app.get("/api/notifications", tags=["Operator"])
 async def get_notifications(unread_only: bool = True):
-<<<<<<< HEAD:backend/main.py
     db = supabase()
     query = db.table("notifications").select("*").order("created_at", desc=True)
-=======
     query = supabase.table("notifications").select("*").order("created_at", desc=True)
->>>>>>> origin/main:backend/app/main.py
     if unread_only:
         query = query.eq("is_read", False)
     result = query.execute()
@@ -106,12 +103,9 @@ async def get_notifications(unread_only: bool = True):
 
 @app.post("/api/notifications/approve", tags=["Operator"])
 async def approve_notification(req: NotificationApproval):
-<<<<<<< HEAD:backend/main.py
     db = supabase()
     db.table("notifications").update({"is_read": True}).eq("notification_id", req.notification_id).execute()
-=======
     supabase.table("notifications").update({"is_read": True}).eq("notification_id", req.notification_id).execute()
->>>>>>> origin/main:backend/app/main.py
 
     if req.approved:
         approval_msg = f"Human approved notification {req.notification_id}. Note: {req.operator_note or 'Approved'}. Execute action."
