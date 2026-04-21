@@ -125,6 +125,9 @@ class GeneratePostMortemLearningOutput(BaseModel):
     
 
 # * Newly added
+class IngredientDetail(BaseModel):
+    qty: float
+    item_name: str
 class MenuItem(BaseModel):
     item_id: str
     name: str
@@ -132,7 +135,8 @@ class MenuItem(BaseModel):
     current_price: float
     margin_percent: float
     is_available: bool
-    primary_ingredient_id: Optional[str] = None  # links back to inventory for stock checks
+    ingredients: List[IngredientDetail] = []  # links back to inventory for stock checks
+    # qty: number, item_name: string
  
 class GetAllMenuItemsOutput(BaseModel):
     """Output for get_all_menu_items"""

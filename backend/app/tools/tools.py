@@ -72,29 +72,29 @@ async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateO
             kitchen_load_percent=round(avg_load * 100, 2)
         ))
 
-@tool
-async def query_macro_context(params: QueryMacroContextInput) -> QueryMacroContextOutput:
-    """
-        Fetch macro-economic indicators to adjust risk and logistics weights.
-        indicators: list containing any of ['oil_price', 'usd_myr', 'local_inflation']
-    """
-    res = supabase.table("market_trends_current").select("*").execute()
+# @tool
+# async def query_macro_context(params: QueryMacroContextInput) -> QueryMacroContextOutput:
+#     """
+#         Fetch macro-economic indicators to adjust risk and logistics weights.
+#         indicators: list containing any of ['oil_price', 'usd_myr', 'local_inflation']
+#     """
+#     res = supabase.table("market_trends_current").select("*").execute()
     
-    if not res.data:
-        return QueryMacroContextOutput(market_data=MarketData(
-            oil=MarketIndicator(value=85.0, trend="up"),
-            fx=FxRate(rate=4.72)
-        ))
+#     if not res.data:
+#         return QueryMacroContextOutput(market_data=MarketData(
+#             oil=MarketIndicator(value=85.0, trend="up"),
+#             fx=FxRate(rate=4.72)
+#         ))
     
-    oil_data = next((item for item in res.data if item["indicator"] == "oil_price"), None)
-    fx_data = next((item for item in res.data if item["indicator"] == "usd_myr"), None)
+#     oil_data = next((item for item in res.data if item["indicator"] == "oil_price"), None)
+#     fx_data = next((item for item in res.data if item["indicator"] == "usd_myr"), None)
     
-    trend_map = lambda slope: "up" if slope > 0 else "down"
+#     trend_map = lambda slope: "up" if slope > 0 else "down"
     
-    return QueryMacroContextOutput(market_data=MarketData(
-        oil=MarketIndicator(value=oil_data["current_value"], trend=trend_map(oil_data["trend_slope"])) if oil_data else None,
-        fx=FxRate(rate=fx_data["current_value"] if fx_data else 4.72)
-    ))
+#     return QueryMacroContextOutput(market_data=MarketData(
+#         oil=MarketIndicator(value=oil_data["current_value"], trend=trend_map(oil_data["trend_slope"])) if oil_data else None,
+#         fx=FxRate(rate=fx_data["current_value"] if fx_data else 4.72)
+#     ))
 
 @tool
 async def parse_unstructured_signal(params: ParseUnstructuredSignalInput) -> ParseUnstructuredSignalOutput:
@@ -318,7 +318,6 @@ async def generate_post_mortem_learning(params: GeneratePostMortemLearningInput)
 # TOOL 1 — get_all_menu_items
 # ─────────────────────────────────────────────────────────────
  
-# ! Fix: 'menu_items' and 'inventory' is linked through 'ingredients' column [{qty:double,item_name:string}] 
 @tool
 async def get_all_menu_items(params: GetAllMenuItemsInput) -> GetAllMenuItemsOutput:
     """
@@ -334,24 +333,25 @@ async def get_all_menu_items(params: GetAllMenuItemsInput) -> GetAllMenuItemsOut
     How to interpret:
     - margin_percent < 20 → flag as margin-vulnerable; protect from discounting
     - is_available=False items → already pulled; do not recommend or promote these
-    - primary_ingredient_id → cross-reference with get_business_state(scope='inventory')
+    - ingredients → cross-reference with get_business_state(scope='inventory')
       to check if the dish is at risk from a stock shortage
  
     filter_category: use to narrow results when you only need one section of the menu.
     include_unavailable: set True only during post-mortem or full menu audit.
     """
     query = supabase.table("menu_items").select(
-        "id, name, category, current_price, margin_percent, is_available, primary_ingredient_id"
+        "id, name, category, current_price, margin_percent, is_available, ingredients"
     )
- 
+
     if not params.include_unavailable:
         query = query.eq("is_available", True)
- 
+
     if params.filter_category:
         query = query.eq("category", params.filter_category)
- 
+
     res = query.order("category").execute()
- 
+
+    # 2. Map the results
     items = [
         MenuItem(
             item_id=row["id"],
@@ -360,11 +360,15 @@ async def get_all_menu_items(params: GetAllMenuItemsInput) -> GetAllMenuItemsOut
             current_price=float(row["current_price"]),
             margin_percent=float(row["margin_percent"]),
             is_available=row["is_available"],
-            primary_ingredient_id=row.get("primary_ingredient_id"),
+            # Since 'ingredients' is JSONB, Supabase returns it as a Python list of dicts
+            ingredients=[
+                IngredientDetail(qty=i["qty"], item_name=i["item_name"]) 
+                for i in (row.get("ingredients") or [])
+            ],
         )
         for row in res.data
     ]
- 
+
     return GetAllMenuItemsOutput(items=items, total_count=len(items))
  
  

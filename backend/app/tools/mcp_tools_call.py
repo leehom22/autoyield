@@ -14,7 +14,13 @@ def get_all_lc_tools() -> list:
             execute_operational_action,
             formulate_marketing_strategy,
             send_human_notification,
-            generate_post_mortem_learning
+            generate_post_mortem_learning,
+            get_all_orders,
+            get_festival_calendar,
+            get_all_menu_items,
+            contact_supplier,
+            save_to_kds,
+            
         ]
     
 
