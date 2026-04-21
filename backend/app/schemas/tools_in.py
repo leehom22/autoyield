@@ -35,6 +35,7 @@ class SimulateYieldScenarioInput(BaseModel):
     item_id: str = Field(..., description="Target menu item ID.") 
     action: Literal["discount", "bundle"] = Field(..., description="Action to simulate.") 
     value: float = Field(..., description="Numerical value for the action (e.g., discount percentage).") 
+    bundle_items: Optional[List[str]] = Field(None, description="List of item IDs for bundle")
 
 class EvaluateSupplyChainOptionsInput(BaseModel):
     """Compares different suppliers based on unit_cost vs. reliability_score + logistics_surcharge. [cite: 37]"""
@@ -52,11 +53,11 @@ class CheckOperationalCapacityInput(BaseModel):
 
 class ActionPayload(BaseModel):
     target_id: str 
-    new_value: Any 
+    new_value: Any
 
 class ExecuteOperationalActionInput(BaseModel):
     """The primary write-tool for UPDATE_MENU, CREATE_PURCHASE_ORDER, or INVENTORY_CORRECTION."""
-    action_type: Literal["UPDATE_MENU", "CREATE_PO", "INVENTORY_ADJUST"] 
+    action_type: Literal["UPDATE_MENU", "CREATE_PO", "INVENTORY_ADJUST", "ALERT_KDS"]
     payload: ActionPayload 
     p_logic_summary: str = Field(..., description="Reasoning trace from P-Agent.") 
     r_logic_summary: str = Field(..., description="Reasoning trace from R-Agent.") 
@@ -76,7 +77,10 @@ class SendHumanNotificationInput(BaseModel):
     """Requests Approve/Reject for high-stakes decisions."""
     priority: Literal["high", "medium"] 
     message: str = Field(..., description="Explanation to the human manager.") 
-    proposed_action_json: Dict[str, Any] = Field(..., description="The action awaiting approval.") 
+    proposed_action_json: Dict[str, Any] = Field(..., description="The action awaiting approval.")
+    channel: Optional[Literal["dashboard", "email", "whatsapp", "telegram"]] = Field(
+        default="dashboard", description="Delivery channel for the notification."
+    ) 
 
 
 # ==========================================
@@ -91,6 +95,11 @@ class GeneratePostMortemLearningInput(BaseModel):
     """Compares expected_yield vs. actual_yield and writes the Lesson."""
     event_id: str = Field(..., description="The ID of the decision/campaign being evaluated.") 
     actual_outcome: ActualOutcome
+    expected_outcome: Optional['ActualOutcome'] = None
+
+class FetchMacroNewsInput(BaseModel):
+    """Fetches real-time macro news and festival context."""
+    query: str = Field(..., description="Keywords for news search (e.g., 'seafood supply', 'upcoming festivals')")
     
     
 # * Newly added tools

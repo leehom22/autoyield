@@ -241,6 +241,82 @@ CREATE POLICY staff_select_staff_roster ON staff_roster FOR SELECT USING (curren
 CREATE POLICY staff_select_market_trends ON market_trends_history FOR SELECT USING (current_setting('request.jwt.claims', true)::json->>'user_role' = 'staff');
 CREATE POLICY staff_select_marketing_campaigns ON marketing_campaigns FOR SELECT USING (current_setting('request.jwt.claims', true)::json->>'user_role' = 'staff');
 
+
 -- ======================================================
--- End of Schema
+-- 10. Notification
 -- ======================================================
+
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    notification_id TEXT NOT NULL,
+    priority TEXT CHECK (priority IN ('high', 'medium')),
+    message TEXT NOT NULL,
+    proposed_action JSONB,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    is_read BOOLEAN DEFAULT FALSE
+);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY manager_all_notifications ON notifications USING (current_setting('request.jwt.claims', true)::json->>'user_role' = 'manager');
+CREATE POLICY staff_select_notifications ON notifications FOR SELECT USING (current_setting('request.jwt.claims', true)::json->>'user_role' = 'staff');
+
+
+-- ======================================================
+-- 11. Agent Permission
+-- ======================================================
+
+CREATE TABLE IF NOT EXISTS agent_permissions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    allow_auto_price_update BOOLEAN DEFAULT TRUE,
+    allow_auto_po_creation BOOLEAN DEFAULT TRUE,
+    allow_auto_inventory_adjust BOOLEAN DEFAULT TRUE,
+    allow_auto_marketing_campaign BOOLEAN DEFAULT FALSE,
+    max_price_change_percent FLOAT DEFAULT 15.0,
+    max_spend_amount DECIMAL(12,2) DEFAULT 500.00,
+    max_discount_percent FLOAT DEFAULT 30.0,
+    approval_mode_for_price_change TEXT DEFAULT 'require_approval',
+    approval_mode_for_po TEXT DEFAULT 'require_approval',
+    approval_mode_for_campaign TEXT DEFAULT 'require_approval',
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_by TEXT DEFAULT 'system'
+);
+
+INSERT INTO agent_permissions (id)
+SELECT uuid_generate_v4()
+WHERE NOT EXISTS (SELECT 1 FROM agent_permissions);
+
+
+-- ======================================================
+-- Refinement
+-- ======================================================
+
+-- Fill up inventory pricing history fields
+ALTER TABLE inventory_pricing_history 
+ADD COLUMN IF NOT EXISTS current_price DECIMAL(10,2);
+
+-- Create Vector Similarity Query RPC for generate_post_mortem_learning
+CREATE OR REPLACE FUNCTION match_knowledge_base (
+  query_embedding vector(1536),
+  match_threshold float,
+  match_count int
+)
+RETURNS TABLE (
+  id uuid,
+  scenario_description text,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    kb.id,
+    kb.scenario_description,
+    1 - (kb.embedding_vector <=> query_embedding) AS similarity
+  FROM knowledge_base kb
+  WHERE 1 - (kb.embedding_vector <=> query_embedding) > match_threshold
+  ORDER BY similarity DESC
+  LIMIT match_count;
+END;
+$$;

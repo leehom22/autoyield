@@ -1,13 +1,19 @@
-# app/api/webhooks/triggers.py
 from fastapi import APIRouter, Request, BackgroundTasks
+from langchain_core.messages import HumanMessage
 
 router = APIRouter()
 
+# Trigger Agent when Low Stock
+async def trigger_crisis_debate(app, item_id: str):
+    graph = app.state.graph
+    await graph.ainvoke({
+        "messages": [HumanMessage(content=f"SYSTEM ALERT: Stock Critical for item_id={item_id}. Initiate Proactive Response and margin evaluation.")]
+    })
+
+# Proactive Triggering: Listen to Supabase Webhook for inventory updates.
 @router.post("/inventory")
 async def handle_inventory_depletion(request: Request, background_tasks: BackgroundTasks):
-    """
-    Proactive Triggering: Listen to Supabase Webhook for inventory updates.
-    """
+    
     payload = await request.json()
     
     # Parsing JSON structure from Supabase Webhook (old_record, record)
@@ -16,12 +22,10 @@ async def handle_inventory_depletion(request: Request, background_tasks: Backgro
     current_qty = record.get("qty")
     min_stock = record.get("min_stock_level")
     
-    # 核心判断逻辑：是否击穿阈值
+    # Check threshold
     if current_qty is not None and min_stock is not None:
         if current_qty < min_stock:
             print(f"⚠️ [Sense] Breach detected for item {item_id}. Waking up Agent Kernel.")
-            
-            # 【关键防御】：必须作为后台任务唤醒，否则阻断 Supabase 的 Webhook 导致重试风暴
-            # background_tasks.add_task(kernel.run_crisis_debate, item_id=item_id, trigger="inventory_shortage")
+            background_tasks.add_task(trigger_crisis_debate, request.app, item_id)
             
     return {"status": "sensed"}

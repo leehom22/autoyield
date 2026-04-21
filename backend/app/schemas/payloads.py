@@ -7,6 +7,7 @@ class GodModePayload(BaseModel):
     inventory_multiplier: float = Field(1.0, ge=0.0, le=2.0)
     currency_usd_myr: float = Field(1.0)
     oil_price_multiplier: float = Field(1.0)
+    order_velocity_multiplier: float = Field(1.0, ge=0.1, le=10.0)
 
 class GodModeVelocityPayload(BaseModel):
     order_velocity_multiplier: float = Field(..., ge=0.1, le=10.0)

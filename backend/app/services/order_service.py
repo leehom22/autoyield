@@ -1,4 +1,3 @@
-# app/services/order_service.py
 import random
 from datetime import datetime
 from app.services.db_service import get_active_menu, insert_mock_order

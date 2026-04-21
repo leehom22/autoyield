@@ -82,3 +82,38 @@ async def trigger_dual_agent(parsed_output):
         "resolution": "Flash sale selected",
         "action_taken": "formulate_marketing_strategy"
     }).execute()
+
+
+
+
+
+
+
+
+
+
+
+main.py chat
+# ─────────────────────────────────────────────
+# Agent Chat Endpoints
+# ─────────────────────────────────────────────
+@app.post("/api/chat", response_model=ChatResponse, tags=["Agent Interact"])
+async def chat(req: ChatRequest):
+    session_id = req.session_id or f"sess_{uuid.uuid4().hex[:8]}"
+    config = {"configurable": {"thread_id": session_id}}
+    
+    try:
+        input_data = {"messages": [HumanMessage(content=req.message)]}
+        # Use the graph initialized in lifespan
+        result = await app.state.graph.ainvoke(input_data, config)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Agent Error: {str(e)}")
+
+    return ChatResponse(
+        session_id=session_id,
+        response=result.get("final_response", "No response generated."),
+        p_agent_position=result.get("p_agent_position"),
+        r_agent_position=result.get("r_agent_position"),
+        debate_rounds=result.get("debate_rounds"),
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
