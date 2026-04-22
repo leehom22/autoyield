@@ -32,7 +32,7 @@ class QueryMacroContextInput(BaseModel):
 
 class SimulateYieldScenarioInput(BaseModel):
     """A Sandboxed calculator for the P-Agent to estimate the profit impact."""
-    item_id: str = Field(..., description="Target menu item ID.") 
+    item_id: str = Field(..., description="The EXACT UUID of the menu item from the database (e.g., '9ec83a01...'). DO NOT use integers or placeholders.") 
     action: Literal["discount", "bundle"] = Field(..., description="Action to simulate.") 
     value: float = Field(..., description="Numerical value for the action (e.g., discount percentage).") 
     bundle_items: Optional[List[str]] = Field(None, description="List of item IDs for bundle")

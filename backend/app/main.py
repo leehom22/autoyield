@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.core.supabase import supabase
 from app.core.crisis_monitor import crisis_monitor_loop
-from app.graph.graph import get_graph
 from langchain_core.messages import HumanMessage
 from IPython.display import Image, display
 # Imports from your second file
@@ -22,9 +21,14 @@ from app.api import permission
 from app.core.supabase import supabase
 from app.graph.forecast_graph import build_forecast_graph
 from app.graph.proactive_graph import build_proactive_graph
+from app.graph.assistant_graph import get_graph, build_assistant_graph
+from app.graph.inventory_graph import build_ingestion_graph
+
 
 forecast_graph = build_forecast_graph()
 proactive_graph = build_proactive_graph()
+inventory_graph = build_ingestion_graph()
+assistant_graph = build_assistant_graph()
 # ─────────────────────────────────────────────
 # Request / Response models
 # ─────────────────────────────────────────────
@@ -133,23 +137,5 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-
-    # Create a folder for diagrams if it doesn't exist
-    os.makedirs("diagrams", exist_ok=True)
-
-    try:
-        # Save Forecast Graph
-        with open("diagrams/forecast_graph.png", "wb") as f:
-            f.write(forecast_graph.get_graph().draw_mermaid_png())
-        
-        # Save Proactive Graph
-        with open("diagrams/proactive_graph.png", "wb") as f:
-            f.write(proactive_graph.get_graph().draw_mermaid_png())
-            
-        print("✅ Graph visualizations saved to /diagrams folder.")
-    except Exception as e:
-        print(f"⚠️ Visualization skipped: {e}")
-
     # Start the FastAPI server
     uvicorn.run(app, host="127.0.0.1", port=8080)

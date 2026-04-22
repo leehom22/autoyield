@@ -12,7 +12,6 @@ from langchain_core.tools import tool
 from app.services.permission_service import check_action_permission
 from app.engine.simulator import get_current_simulated_time
 
-
 # ==========================================
 # Phase 1: Perception
 # ==========================================
@@ -26,6 +25,8 @@ async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateO
     Retrieve real-time snapshots of business state.
     scope: 'inventory' | 'finance' | 'ops'
     """
+    from app.engine.simulator import get_current_simulated_time
+
     scope = params.scope
     sim_now = get_current_simulated_time()
     

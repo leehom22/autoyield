@@ -20,6 +20,7 @@ from typing import Annotated, TypedDict, Literal
 from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, BaseMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -33,14 +34,28 @@ load_dotenv()
 # ─────────────────────────────────────────────
 # GLM client
 # ─────────────────────────────────────────────
-def get_glm():
+def get_glm(): #Using OpenAI
+    """Returns the OpenAI LLM instance."""
     return ChatOpenAI(
-        model=os.getenv("GLM_MODEL", "glm-4-plus"),
-        api_key=os.getenv("GLM_API_KEY"),
-        base_url=os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/"),
+        # model=os.getenv("OPENAI_MODEL", "gpt-4o"), # or gpt-4o-mini
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url="https://openrouter.ai/api/v1",
         temperature=0.3,
     )
-
+# def get_glm():
+#     return ChatOpenAI(
+#         model=os.getenv("GLM_MODEL", "glm-4-plus"),
+#         api_key=os.getenv("GLM_API_KEY"),
+#         base_url=os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/"),
+#         temperature=0.3,
+#     )
+# def get_model():
+#     """Returns the Gemini LLM instance."""
+#     return ChatGoogleGenerativeAI(
+#         model="gemini-1.5-flash", # or "gemini-1.5-pro"
+#         google_api_key=os.environ.get("GEMINI_API_KEY"),
+#         temperature=0.3,
+#     )
 
 # ─────────────────────────────────────────────
 # State
@@ -112,7 +127,8 @@ _DEBATE_TRIGGERS = [
 def supervisor_node(state: AgentState) -> AgentState:
     tools = get_all_lc_tools()
     llm = get_glm().bind_tools(tools)
-
+    # llm = get_model().bind_tools(tools)
+    
     messages = [SystemMessage(content=SUPERVISOR_PROMPT)] + state["messages"]
     response = llm.invoke(messages)
 
@@ -147,7 +163,8 @@ def p_agent_node(state: AgentState) -> AgentState:
         "simulate_yield_scenario", "get_all_menu_items", "get_business_state"
     ]]
     llm = get_glm().bind_tools(tools)
-
+    # llm = get_model().bind_tools(tools)
+    
     context = (
         f"Current situation:\n{state['messages'][-1].content if state['messages'] else 'No context'}\n\n"
         f"R-Agent's last position: {state.get('r_agent_position', 'None yet — you go first.')}\n\n"
@@ -173,7 +190,8 @@ def r_agent_node(state: AgentState) -> AgentState:
         "check_operational_capacity", "get_business_state", "simulate_yield_scenario"
     ]]
     llm = get_glm().bind_tools(tools)
-
+    # llm = get_model().bind_tools(tools)
+    
     # Force concession after max rounds to guarantee graph termination
     rounds = state.get("debate_rounds", 0)
     force_concede = rounds >= 3
@@ -207,6 +225,7 @@ def r_agent_node(state: AgentState) -> AgentState:
 def executor_node(state: AgentState) -> AgentState:
     tools = get_all_lc_tools()
     llm = get_glm().bind_tools(tools)
+    # llm = get_model().bind_tools(tools)
 
     if state.get("decision_type") == "debate":
         synthesis = (
@@ -273,7 +292,7 @@ def route_after_tools(state: AgentState) -> str:
 # ─────────────────────────────────────────────
 # Build graph
 # ─────────────────────────────────────────────
-def build_graph():
+def build_assistant_graph():
     tools = get_all_lc_tools()
     tool_node = ToolNode(tools)
 
@@ -320,5 +339,5 @@ _graph = None
 def get_graph():
     global _graph
     if _graph is None:
-        _graph = build_graph()
+        _graph = build_assistant_graph()
     return _graph   
