@@ -3,7 +3,8 @@ from app.tools.tools import *
 
 
 def get_all_lc_tools() -> list:
-    return [get_business_state, 
+    return [
+            get_business_state, 
             query_macro_context,
             # parse_unstructured_signal,
             fetch_macro_news,
@@ -13,7 +14,13 @@ def get_all_lc_tools() -> list:
             execute_operational_action,
             formulate_marketing_strategy,
             send_human_notification,
-            generate_post_mortem_learning
-            ]
+            generate_post_mortem_learning,
+            get_all_orders,
+            get_festival_calendar,
+            get_all_menu_items,
+            contact_supplier,
+            save_to_kds,
+            
+        ]
     
 

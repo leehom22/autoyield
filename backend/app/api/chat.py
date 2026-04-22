@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
-from app.graph.graph import get_graph
+from app.graph.assistant_graph import get_graph
 
 router = APIRouter(prefix="/chat", tags=["Chatbot"])
 

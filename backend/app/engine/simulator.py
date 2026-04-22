@@ -145,9 +145,9 @@ class WorldSimulationEngine:
             # Sleep for real seconds before next tick
             await asyncio.sleep(self.tick_real_sec)
 
-    # For synchronize the global datetime
-    def get_current_simulated_time() -> datetime:
-        return world_engine.simulated_time
-
 # Object instantiation
 world_engine = WorldSimulationEngine()
+
+# For synchronize the global datetime
+def get_current_simulated_time() -> datetime:
+    return world_engine.simulated_time

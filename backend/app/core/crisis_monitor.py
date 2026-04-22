@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from app.core.supabase import supabase
 from app.core.state import SYSTEM_STATE
-from app.engine.simulator import world_engine, get_current_simulated_time
+from app.engine.simulator import get_current_simulated_time
 from langchain_core.messages import HumanMessage
 from app.core.config import settings
 
