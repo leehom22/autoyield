@@ -10,7 +10,7 @@ import Inventory from './pages/Inventory';
 import Menu from './pages/Menu';
 import Orders from './pages/Orders';
 import Chatbot from './pages/Chatbot';
-
+// update 
 function App() {
   return (
     <Router>
