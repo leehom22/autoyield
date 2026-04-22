@@ -9,9 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.core.supabase import supabase
 from app.core.crisis_monitor import crisis_monitor_loop
-from app.graph.graph import get_graph
 from langchain_core.messages import HumanMessage
-
+from IPython.display import Image, display
 # Imports from your second file
 from app.engine.simulator import world_engine
 from app.api import stream, sandbox, agent, webhook
@@ -19,6 +18,17 @@ from app.core.scheduler import start_scheduler, shutdown_scheduler
 from app.api import chat
 from app.api import permission
 
+from app.core.supabase import supabase
+from app.graph.forecast_graph import build_forecast_graph
+from app.graph.proactive_graph import build_proactive_graph
+from app.graph.assistant_graph import get_graph, build_assistant_graph
+from app.graph.inventory_graph import build_ingestion_graph
+
+
+forecast_graph = build_forecast_graph()
+proactive_graph = build_proactive_graph()
+inventory_graph = build_ingestion_graph()
+assistant_graph = build_assistant_graph()
 # ─────────────────────────────────────────────
 # Request / Response models
 # ─────────────────────────────────────────────
@@ -87,6 +97,8 @@ app.add_middleware(
 # ─────────────────────────────────────────────
 @app.get("/api/notifications", tags=["Operator"])
 async def get_notifications(unread_only: bool = True):
+    db = supabase()
+    query = db.table("notifications").select("*").order("created_at", desc=True)
     query = supabase.table("notifications").select("*").order("created_at", desc=True)
     if unread_only:
         query = query.eq("is_read", False)
@@ -95,6 +107,8 @@ async def get_notifications(unread_only: bool = True):
 
 @app.post("/api/notifications/approve", tags=["Operator"])
 async def approve_notification(req: NotificationApproval):
+    db = supabase()
+    db.table("notifications").update({"is_read": True}).eq("notification_id", req.notification_id).execute()
     supabase.table("notifications").update({"is_read": True}).eq("notification_id", req.notification_id).execute()
 
     if req.approved:
@@ -120,6 +134,8 @@ app.include_router(permission.router, prefix="/api/permissions", tags=["Authoriz
 async def health():
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
+
 if __name__ == "__main__":
     import uvicorn
+    # Start the FastAPI server
     uvicorn.run(app, host="127.0.0.1", port=8080)
