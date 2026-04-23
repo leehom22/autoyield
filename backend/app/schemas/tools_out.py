@@ -26,24 +26,6 @@ class OpsState(BaseModel):
     staff_shortage_risk: Optional[Literal["low", "medium", "high"]] = None
     bottleneck_role: Optional[str] = None
 
-class MenuItem(BaseModel):
-    item_id: str
-    name: str
-    category: str
-    current_price: float
-    margin_percent: float
-    is_available: bool
-    primary_ingredient_id: Optional[str] = None  # links back to inventory for stock checks
-
-class MenuItem(BaseModel):
-    item_id: str
-    name: str
-    category: str
-    current_price: float
-    margin_percent: float
-    is_available: bool
-    primary_ingredient_id: Optional[str] = None  # links back to inventory for stock checks
-
 class GetBusinessStateOutput(BaseModel):
     """Output for get_business_state"""
     inventory: Optional[List[InventoryItemRisk]] = None

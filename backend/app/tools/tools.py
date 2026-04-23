@@ -11,6 +11,7 @@ from app.schemas.tools_out import *
 from langchain_core.tools import tool
 from app.services.permission_service import check_action_permission
 from app.engine.simulator import get_current_simulated_time
+from app.core.glm_client import glm_client
 
 # ==========================================
 # Phase 1: Perception
@@ -295,7 +296,7 @@ async def execute_operational_action(params: ExecuteOperationalActionInput) -> E
             status = "success"
 
         elif params.action_type == "ALERT_KDS":
-            supabase.table("kds_events").insert(params.payload.new_value).execute()
+            supabase.table("kds_queue").insert(params.payload.new_value).execute()
             status = "success"
             
         if status == "success":
@@ -866,13 +867,11 @@ async def _glm_summarise(headline: str, indicator: str) -> str:
             "In exactly one sentence, state what this means for a Malaysian restaurant's "
             "food costs, supplier pricing, or customer spending power. Be specific and practical."
         )
-        response = await glm_client.chat.completions.create(
-            model="glm-4-plus",
+        summary = await glm_client.chat_completion(
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=80,
-            temperature=0.2,
+            model=settings.GLM_TEXT_MODEL,
         )
-        return response.choices[0].message.content.strip()
+        return summary.strip()
     except Exception:
         return headline[:120]
  

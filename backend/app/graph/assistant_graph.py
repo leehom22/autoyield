@@ -27,6 +27,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from app.tools.mcp_tools_call import get_all_lc_tools
+from app.core.config import settings
 
 load_dotenv()
 
@@ -34,14 +35,22 @@ load_dotenv()
 # ─────────────────────────────────────────────
 # GLM client
 # ─────────────────────────────────────────────
-def get_glm(): #Using OpenAI
-    """Returns the OpenAI LLM instance."""
+def get_glm():
+    """Returns the LLM instance configured from env vars."""
     return ChatOpenAI(
-        # model=os.getenv("OPENAI_MODEL", "gpt-4o"), # or gpt-4o-mini
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url="https://openrouter.ai/api/v1",
+        model=settings.GLM_TEXT_MODEL,
+        api_key=settings.GLM_API_KEY,
+        base_url=settings.GLM_BASE_URL,
         temperature=0.3,
     )
+# def get_glm(): #Using OpenAI
+#     """Returns the OpenAI LLM instance."""
+#     return ChatOpenAI(
+#         # model=os.getenv("OPENAI_MODEL", "gpt-4o"), # or gpt-4o-mini
+#         api_key=os.getenv("OPENAI_API_KEY"),
+#         base_url="https://openrouter.ai/api/v1",
+#         temperature=0.3,
+#     )
 # def get_glm():
 #     return ChatOpenAI(
 #         model=os.getenv("GLM_MODEL", "glm-4-plus"),

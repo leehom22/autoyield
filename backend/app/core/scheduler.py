@@ -22,7 +22,7 @@ async def weekly_forecast(graph):
 
 def start_scheduler(graph):
     scheduler.add_job(
-        lambda: asyncio.run(weekly_forecast(graph)),
+        lambda: asyncio.get_event_loop().create_task(weekly_forecast(graph)),
         'interval',
         weeks=1,
         id='weekly_forecast',

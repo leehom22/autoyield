@@ -21,9 +21,16 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from app.tools.mcp_tools_call import get_all_lc_tools
-from app.core.glm_client import GLMClient
+from app.core.config import settings
+from langchain_openai import ChatOpenAI
 
-get_glm = lambda: GLMClient()
+def get_glm():
+    return ChatOpenAI(
+        model=settings.GLM_TEXT_MODEL,
+        api_key=settings.GLM_API_KEY,
+        base_url=settings.GLM_BASE_URL,
+        temperature=0.3,
+    )
 
 
 # ─────────────────────────────────────────────

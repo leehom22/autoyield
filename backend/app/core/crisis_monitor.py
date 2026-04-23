@@ -5,6 +5,7 @@ from app.core.state import SYSTEM_STATE
 from app.engine.simulator import get_current_simulated_time
 from langchain_core.messages import HumanMessage
 from app.core.config import settings
+from app.engine.simulator import world_engine
 
 # Avoid agent from being triggered when handling crisis
 _last_trigger_real_time = {}
@@ -24,7 +25,7 @@ async def _can_trigger_and_record(crisis_type: str) -> bool:
         return False
 
 def _record_trigger(crisis_type: str):
-    _last_trigger_real_time[crisis_type] = datetime.now()
+    _last_trigger_real_time[crisis_type] = get_current_simulated_time()
 
 async def _call_agent(app, crisis_msg: str):
     
@@ -83,7 +84,7 @@ async def check_and_trigger_crisis(app):
     if len(oil_history.data) >= 2:
         latest = oil_history.data[0]["value"]
         previous = oil_history.data[1]["value"]
-        if latest > previous * settings.OIL_PRICE_SPIKE_THRESHOLD and await _can_trigger_and_record("inventory_crisis"):
+        if latest > previous * settings.OIL_PRICE_SPIKE_THRESHOLD and await _can_trigger_and_record("oil_spike"):
             _record_trigger("oil_spike")
             pct = (latest / previous - 1) * 100
             msg = f"Oil price spike: from {previous:.2f} to {latest:.2f} (+{pct:.0f}%)."
@@ -92,7 +93,7 @@ async def check_and_trigger_crisis(app):
     
     # 3. Abnormal Order Velocity
     velocity = SYSTEM_STATE.get("order_velocity_multiplier", 1.0)
-    if velocity > 3.0 and await _can_trigger_and_record("inventory_crisis"):
+    if velocity > 3.0 and await _can_trigger_and_record("order_surge"):
         _record_trigger("order_surge")
         msg = f"Order velocity surge detected: current multiplier {velocity:.1f}x normal rate."
         await _call_agent(app, msg)

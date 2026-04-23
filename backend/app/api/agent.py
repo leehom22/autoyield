@@ -2,9 +2,6 @@ from app.schemas.payloads import ChatbotInstructionPayload, DocumentAssetPayload
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from typing import Optional
 import base64
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException
-from typing import Optional
-import base64
 from langchain_core.messages import HumanMessage
 from app.services.invoice_extractor import extract_invoice_data
 from app.services.db_service import get_inventory_status
@@ -30,7 +27,6 @@ async def upload_invoice(
     graph = app.state.graph
     
     # Read and Parse Invoice Image
-    contents = await file.read()
     b64 = base64.b64encode(contents).decode()
     image_url = f"data:{file.content_type};base64,{b64}"
     

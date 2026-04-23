@@ -19,12 +19,6 @@ class ParseUnstructuredSignalInput(BaseModel):
     ) 
     image_data_url: Optional[str] = Field(None, description="Data URL of the image (if type is ocr_result)")
 
-class QueryMacroContextInput(BaseModel):
-    """Fetches oil prices and currency trends to adjust weights."""
-    indicators: List[Literal["oil_price", "usd_myr", "local_inflation"]] = Field(
-        ..., description="List of macro indicators to query."
-    ) 
-
 
 # ==========================================
 # Phase 2: Reasoning & Simulation (The Debate)
