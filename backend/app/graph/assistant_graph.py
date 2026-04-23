@@ -34,21 +34,13 @@ load_dotenv()
 # ─────────────────────────────────────────────
 # GLM client
 # ─────────────────────────────────────────────
-def get_glm(): #Using OpenAI
-    """Returns the OpenAI LLM instance."""
+def get_glm():
     return ChatOpenAI(
-        # model=os.getenv("OPENAI_MODEL", "gpt-4o"), # or gpt-4o-mini
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url="https://openrouter.ai/api/v1",
+        model=os.getenv("GLM_MODEL", "glm-4-plus"),
+        api_key=os.getenv("GLM_API_KEY"),
+        base_url=os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/"),
         temperature=0.3,
     )
-# def get_glm():
-#     return ChatOpenAI(
-#         model=os.getenv("GLM_MODEL", "glm-4-plus"),
-#         api_key=os.getenv("GLM_API_KEY"),
-#         base_url=os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/"),
-#         temperature=0.3,
-#     )
 # def get_model():
 #     """Returns the Gemini LLM instance."""
 #     return ChatGoogleGenerativeAI(
