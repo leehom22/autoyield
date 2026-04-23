@@ -127,6 +127,7 @@ async def test_assistant_graph():
         }
 
     # ── Test 1: Direct path — read-only query, should NOT trigger debate
+    # ** Test with success
     state = await stream_graph(
         graph,
         make_state("What is the current inventory level for salmon?"),
@@ -139,6 +140,7 @@ async def test_assistant_graph():
         warn(f"Expected 'direct', got '{decision_type}'")
 
     # ── Test 2: Debate path — promotion keyword must trigger P vs R
+    # ** Test with success
     state = await stream_graph(
         graph,
         make_state("I want to run a 20% discount promotion on all noodle dishes this Friday."),
@@ -151,7 +153,7 @@ async def test_assistant_graph():
     else:
         warn(f"Expected 'debate', got '{decision_type}'")
 
-    # ── Test 3: Debate path — supplier switch
+    # # ── Test 3: Debate path — supplier switch
     state = await stream_graph(
         graph,
         make_state("Switch our salmon supplier to OceanKing and place a bulk purchase order."),
@@ -163,6 +165,7 @@ async def test_assistant_graph():
         warn(f"Supplier switch did not trigger debate — check keywords")
 
     # ── Test 4: High-stakes gate — price change >15% should hit send_human_notification
+    # ** Test with success
     state = await stream_graph(
         graph,
         make_state("Increase the price of salmon rice by 25% starting today."),
@@ -175,6 +178,7 @@ async def test_assistant_graph():
         warn("Expected human notification mention in final response — verify executor prompt")
 
     # ── Test 5: Forced consensus — debate must terminate within 3 rounds
+    # ** Test with success
     state = await stream_graph(
         graph,
         make_state("Launch a flash sale with 30% off all menu items immediately."),
@@ -251,7 +255,7 @@ async def test_ingestion_graph():
     state = await stream_graph(
         graph,
         make_state(
-            "OCR result from invoice photo: 'Chikn brst 15kg @ RM13.50/kg "
+            "OCR result from invoice x: 'Chikn brst 15kg @ RM13.50/kg "
             "dlvry 22/04 Supplier: GoodMeat Trading'. Current stored cost: RM12.00/kg."
         ),
         "Messy OCR invoice — chicken breast 12.5% above stored cost"
