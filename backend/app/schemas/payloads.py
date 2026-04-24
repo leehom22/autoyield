@@ -2,9 +2,19 @@ from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional, Literal
 
 # --- God Mode Schemas ---
+# class GodModePayload(BaseModel):
+#     inventory_target_id: Optional[str] = None
+#     inventory_multiplier: float = Field(1.0, ge=0.0, le=2.0)
+#     currency_usd_myr: float = Field(1.0)
+#     oil_price_multiplier: float = Field(1.0)
+#     order_velocity_multiplier: float = Field(1.0, ge=0.1, le=10.0)
+
 class GodModePayload(BaseModel):
     inventory_target_id: Optional[str] = None
+    # Old Field
     inventory_multiplier: float = Field(1.0, ge=0.0, le=2.0)
+    inventory_qty_multiplier: float = Field(1.0, ge=0.0, le=10.0)
+    inventory_cost_multiplier: float = Field(1.0, ge=0.0, le=10.0)
     currency_usd_myr: float = Field(1.0)
     oil_price_multiplier: float = Field(1.0)
     order_velocity_multiplier: float = Field(1.0, ge=0.1, le=10.0)
