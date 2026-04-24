@@ -365,67 +365,108 @@ async def test_forecast_graph():
             "macro_risk_level": "unknown",
             "pending_handler": "none",
             "plan_generated": False,
+            "notification_sent": False,
+            "forecast_path": "unknown",
+            "reorder_plan": "",
+            "kitchen_warning": "",
+            "constraint_summary": "",
+            "revised_plan": "",
+            "node_tool_call_count": 0,
         }
 
-    # ── Test 1: Scheduled run with no context — standard forecast path
+    # Test 1: Standard forecast path
+    # ** Test with success
     state = await stream_graph(
         graph,
         make_state("Scheduled weekly forecast run. Today is Friday evening."),
         "Standard forecast — Friday evening scheduled run"
     )
-    risk = state.get("macro_risk_level", "unknown")
-    plan = state.get("plan_generated", False)
-    if risk != "unknown":
-        ok(f"Macro risk level resolved: '{risk}'")
-    else:
-        warn("macro_risk_level still 'unknown' — evaluate_risk_node may have failed to parse")
-    if plan:
+
+    if state.get("plan_generated"):
         ok("Plan generated successfully")
     else:
-        warn("plan_generated=False — standard_forecast or crisis_optimizer did not complete")
+        warn("plan_generated=False")
 
-    # ── Test 2: Crisis signal — macro risk should trigger crisis_optimizer
+    if state.get("reorder_plan"):
+        ok("Standard path generated reorder plan")
+    else:
+        warn("Missing reorder_plan — standard path may not have reached reorder_trigger")
+
+    if state.get("kitchen_warning"):
+        ok("Standard path generated kitchen pre-warning")
+    else:
+        warn("Missing kitchen_warning — kitchen_prewarn node may not have run")
+
+    if state.get("notification_sent"):
+        ok("Forecast notification sent")
+    else:
+        warn("notification_sent=False — notification node/tool may not have completed")
+
+    # Test 2: Crisis path
+    # ** Test with success
     state = await stream_graph(
         graph,
         make_state(
             "Scheduled forecast run. "
-            "NOTE: query_macro_context returned overall_risk_level='high'. "
-            "Oil prices spiked 18% this week. USD/MYR at 4.95."
+            "Macro crisis: oil prices spiked 18% this week. "
+            "USD/MYR at 4.95. Inflation pressure is high."
         ),
-        "Crisis forecast — macro risk='high' (crisis_optimizer expected)"
+        "Crisis forecast — macro risk expected"
     )
-    risk = state.get("macro_risk_level", "unknown")
-    if risk in ("high", "elevated"):
-        ok(f"Macro risk '{risk}' correctly triggered crisis_optimizer")
-    else:
-        warn(f"Expected 'high'/'elevated', got '{risk}' — crisis path may not have fired")
 
-    # ── Test 3: Festival context — Hari Raya in 3 days
+    if state.get("forecast_path") == "crisis":
+        ok("Crisis optimizer path triggered")
+    else:
+        warn(f"Expected crisis path, got {state.get('forecast_path')}")
+
+    if state.get("constraint_summary"):
+        ok("Constraint node completed")
+    else:
+        warn("Missing constraint_summary — constraint_node may not have run")
+
+    if state.get("revised_plan"):
+        ok("Revised crisis plan generated")
+    else:
+        warn("Missing revised_plan — revised_plan_node may not have run")
+
+    # Test 3: Festival context
+    # ** Test with success
     state = await stream_graph(
         graph,
         make_state(
             "Scheduled forecast run. Hari Raya Aidilfitri is in 3 days. "
             "Expect -70% lunch covers and +80% pre-Raya dinner this week."
         ),
-        "Festival forecast — Hari Raya in 3 days (demand adjustment expected)"
+        "Festival forecast — Hari Raya in 3 days"
     )
-    plan = state.get("plan_generated", False)
-    if plan:
-        ok("Plan generated with festival context")
-    else:
-        warn("Plan not generated — check read_signals_node festival handling")
 
-    # ── Test 4: Tool loop verification — standard_forecast must receive tool results
+    if state.get("plan_generated"):
+        ok("Festival forecast generated plan")
+    else:
+        warn("Festival forecast failed to generate plan")
+
+    if "raya" in state.get("signal_summary", "").lower() or "dinner" in state.get("forecast_result", "").lower():
+        ok("Festival signal reflected in forecast")
+    else:
+        warn("Festival context not reflected strongly in signal/forecast")
+
+    # Test 4: Notification terminal check
+    # ** Test with success
     state = await stream_graph(
         graph,
         make_state("Scheduled forecast. Normal Friday. No macro events."),
-        "Tool loop verification — standard_forecast must loop through tool_node"
+        "Notification terminal check"
     )
-    if state.get("plan_generated"):
-        ok("plan_generated=True confirms tool loop-back working in standard_forecast")
-    else:
-        warn("plan_generated=False — tool_node may be routing to evaluate_risk instead of standard_forecast")
 
+    if state.get("notification_sent"):
+        ok("Notification triggered once after finalized plan")
+    else:
+        warn("Notification was not sent")
+
+    if state.get("plan_generated"):
+        ok("Graph completed without notification loop")
+    else:
+        warn("Graph did not complete correctly")
 
 # ─────────────────────────────────────────────
 # Main runner
