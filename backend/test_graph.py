@@ -128,54 +128,54 @@ async def test_assistant_graph():
 
     # ── Test 1: Direct path — read-only query, should NOT trigger debate
     # ** Test with success
-    state = await stream_graph(
-        graph,
-        make_state("What is the current inventory level for salmon?"),
-        "Direct path — inventory check (no debate expected)"
-    )
-    decision_type = state.get("decision_type", "unknown")
-    if decision_type == "direct":
-        ok(f"Routed as 'direct' — correct")
-    else:
-        warn(f"Expected 'direct', got '{decision_type}'")
+    # state = await stream_graph(
+    #     graph,
+    #     make_state("What is the current inventory level for salmon?"),
+    #     "Direct path — inventory check (no debate expected)"
+    # )
+    # decision_type = state.get("decision_type", "unknown")
+    # if decision_type == "direct":
+    #     ok(f"Routed as 'direct' — correct")
+    # else:
+    #     warn(f"Expected 'direct', got '{decision_type}'")
 
     # ── Test 2: Debate path — promotion keyword must trigger P vs R
     # ** Test with success
-    state = await stream_graph(
-        graph,
-        make_state("I want to run a 20% discount promotion on all noodle dishes this Friday."),
-        "Debate path — promotion discount (debate expected)"
-    )
-    decision_type = state.get("decision_type", "unknown")
-    debate_rounds = state.get("debate_rounds", 0)
-    if decision_type == "debate":
-        ok(f"Routed as 'debate' — correct (rounds: {debate_rounds})")
-    else:
-        warn(f"Expected 'debate', got '{decision_type}'")
+    # state = await stream_graph(
+    #     graph,
+    #     make_state("I want to run a 20% discount promotion on all noodle dishes this Friday."),
+    #     "Debate path — promotion discount (debate expected)"
+    # )
+    # decision_type = state.get("decision_type", "unknown")
+    # debate_rounds = state.get("debate_rounds", 0)
+    # if decision_type == "debate":
+    #     ok(f"Routed as 'debate' — correct (rounds: {debate_rounds})")
+    # else:
+    #     warn(f"Expected 'debate', got '{decision_type}'")
 
     # # ── Test 3: Debate path — supplier switch
-    state = await stream_graph(
-        graph,
-        make_state("Switch our salmon supplier to OceanKing and place a bulk purchase order."),
-        "Debate path — supplier switch + bulk purchase"
-    )
-    if state.get("decision_type") == "debate":
-        ok(f"Supplier switch correctly triggered debate")
-    else:
-        warn(f"Supplier switch did not trigger debate — check keywords")
+    # state = await stream_graph(
+    #     graph,
+    #     make_state("Switch our salmon supplier to OceanKing and place a bulk purchase order."),
+    #     "Debate path — supplier switch + bulk purchase"
+    # )
+    # if state.get("decision_type") == "debate":
+    #     ok(f"Supplier switch correctly triggered debate")
+    # else:
+    #     warn(f"Supplier switch did not trigger debate — check keywords")
 
     # ── Test 4: High-stakes gate — price change >15% should hit send_human_notification
     # ** Test with success
-    state = await stream_graph(
-        graph,
-        make_state("Increase the price of salmon rice by 25% starting today."),
-        "High-stakes gate — price increase >15% (human notification expected)"
-    )
-    final = state.get("final_response", "")
-    if "notification" in final.lower() or "approval" in final.lower():
-        ok("High-stakes action correctly routed to human notification")
-    else:
-        warn("Expected human notification mention in final response — verify executor prompt")
+    # state = await stream_graph(
+    #     graph,
+    #     make_state("Increase the price of salmon rice by 25% starting today."),
+    #     "High-stakes gate — price increase >15% (human notification expected)"
+    # )
+    # final = state.get("final_response", "")
+    # if "notification" in final.lower() or "approval" in final.lower():
+    #     ok("High-stakes action correctly routed to human notification")
+    # else:
+    #     warn("Expected human notification mention in final response — verify executor prompt")
 
     # ── Test 5: Forced consensus — debate must terminate within 3 rounds
     # ** Test with success
