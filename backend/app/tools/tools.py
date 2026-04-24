@@ -769,7 +769,15 @@ async def get_menu_pricing_snapshot(
 # ─────────────────────────────────────────────────────────────
 # TOOL 2 — contact_supplier
 # ─────────────────────────────────────────────────────────────
- 
+import re
+
+def _is_uuid(value: str) -> bool:
+    return bool(re.fullmatch(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        value or ""
+    ))
+
+
 @tool
 async def contact_supplier(params: ContactSupplierInput) -> ContactSupplierOutput:
     """
@@ -796,9 +804,19 @@ async def contact_supplier(params: ContactSupplierInput) -> ContactSupplierOutpu
       supplier_contact_logs for manual follow-up by the operator.
     """
     # Fetch supplier info
-    supplier_res = supabase.table("suppliers").select(
+    supplier_key = params.supplier_id
+
+    query = supabase.table("suppliers").select(
         "id, name, avg_lead_time, reliability_score, contact_email, contact_phone"
-    ).eq("id", params.supplier_id).execute()
+    )
+
+    if _is_uuid(supplier_key):
+        supplier_res = query.eq("id", supplier_key).execute()
+    else:
+        # fallback: search by supplier code or name
+        supplier_res = query.or_(
+            f"name.ilike.%{supplier_key}%,supplier_code.eq.{supplier_key}"
+        ).execute()
  
     if not supplier_res.data:
         return ContactSupplierOutput(

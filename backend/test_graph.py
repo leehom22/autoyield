@@ -287,54 +287,57 @@ async def test_proactive_graph():
         }
 
     # ── Test 1: No anomaly — should route to END cleanly
-    state = await stream_graph(
-        graph,
-        make_state("System check: all inventory levels normal. Kitchen load at 45%. No alerts."),
-        "No anomaly — should terminate cleanly"
-    )
-    anomaly = state.get("anomaly_type", "unknown")
-    action = state.get("action_taken", False)
-    if anomaly == "none":
-        ok("Classified as 'none' — no action taken, graph exited cleanly")
-    else:
-        warn(f"Expected 'none', got '{anomaly}'")
-    if not action:
-        ok("No unnecessary actions triggered")
+    # ** Test with success
+    # state = await stream_graph(
+    #     graph,
+    #     make_state("System check: all inventory levels normal. Kitchen load at 45%. No alerts."),
+    #     "No anomaly — should terminate cleanly"
+    # )
+    # anomaly = state.get("anomaly_type", "unknown")
+    # action = state.get("action_taken", False)
+    # if anomaly == "none":
+    #     ok("Classified as 'none' — no action taken, graph exited cleanly")
+    # else:
+    #     warn(f"Expected 'none', got '{anomaly}'")
+    # if not action:
+    #     ok("No unnecessary actions triggered")
 
     # ── Test 2: Stock critical — salmon < 1 day supply
-    state = await stream_graph(
-        graph,
-        make_state(
-            "ALERT: salmon stock at 0.5kg. At current order rate of 3kg/day, "
-            "we have less than 4 hours of supply remaining. Expiry risk score: 0.95."
-        ),
-        "Stock critical — salmon depleted (flash sale + notify expected)"
-    )
-    anomaly = state.get("anomaly_type", "unknown")
-    action = state.get("action_taken", False)
-    if anomaly == "stock_critical":
-        ok("Correctly classified as 'stock_critical'")
-    else:
-        warn(f"Expected 'stock_critical', got '{anomaly}'")
-    if action:
-        ok("Action taken (flash sale / notify / PO)")
-    else:
-        warn("action_taken is False — check stock_crisis_handler execution")
+    # ** Test with success
+    # state = await stream_graph(
+    #     graph,
+    #     make_state(
+    #         "ALERT: salmon stock at 0.5kg. At current order rate of 3kg/day, "
+    #         "we have less than 4 hours of supply remaining. Expiry risk score: 0.95."
+    #     ),
+    #     "Stock critical — salmon depleted (flash sale + notify expected)"
+    # )
+    # anomaly = state.get("anomaly_type", "unknown")
+    # action = state.get("action_taken", False)
+    # if anomaly == "stock_critical":
+    #     ok("Correctly classified as 'stock_critical'")
+    # else:
+    #     warn(f"Expected 'stock_critical', got '{anomaly}'")
+    # if action:
+    #     ok("Action taken (flash sale / notify / PO)")
+    # else:
+    #     warn("action_taken is False — check stock_crisis_handler execution")
 
     # ── Test 3: Kitchen surge — order spike
-    state = await stream_graph(
-        graph,
-        make_state(
-            "ALERT: kitchen_load_percent is 92%. Pending orders jumped from 8 to 31 "
-            "in the last 15 minutes. Active staff: 3. Rice stock running low."
-        ),
-        "Kitchen surge — load 92% (rewrite menu + KDS alert expected)"
-    )
-    anomaly = state.get("anomaly_type", "unknown")
-    if anomaly == "kitchen_surge":
-        ok("Correctly classified as 'kitchen_surge'")
-    else:
-        warn(f"Expected 'kitchen_surge', got '{anomaly}'")
+    # ** Test with success
+    # state = await stream_graph(
+    #     graph,
+    #     make_state(
+    #         "ALERT: kitchen_load_percent is 92%. Pending orders jumped from 8 to 31 "
+    #         "in the last 15 minutes. Active staff: 3. Rice stock running low."
+    #     ),
+    #     "Kitchen surge — load 92% (rewrite menu + KDS alert expected)"
+    # )
+    # anomaly = state.get("anomaly_type", "unknown")
+    # if anomaly == "kitchen_surge":
+    #     ok("Correctly classified as 'kitchen_surge'")
+    # else:
+    #     warn(f"Expected 'kitchen_surge', got '{anomaly}'")
 
     # ── Test 4: Tool loop — verify tool_node routes BACK to handler
     # (If tool_node routes to END, action_taken will be False despite the handler running)

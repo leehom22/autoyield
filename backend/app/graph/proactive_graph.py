@@ -1,16 +1,5 @@
 """
 proactive_graph.py — Proactive Crisis Response (fixed)
-
-Fixes from original:
-1. tool_node no longer routes to END — it routes back to whichever handler called it
-   via a 'pending_handler' field in state (the diagram shows the loop continuing,
-   not terminating after tool execution).
-2. kitchen_surge_handler now includes execute_operational_action (rewrite menu) and
-   generate_post_mortem_learning (log + post-mortem), both of which appear in the diagram.
-3. stock_crisis_handler now includes contact_supplier for the CREATE_PO step shown
-   in the 'Log + post-mortem' box at bottom of diagram.
-4. Both handlers properly loop back through tool_node until no more tool calls are made,
-   then route to END.
 """
 
 from typing import Annotated, TypedDict, Literal
@@ -20,20 +9,34 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from app.tools.mcp_tools_call import get_all_lc_tools
-from app.core.glm_client import GLMClient
+from langchain_openai import ChatOpenAI
+import os
 
-get_glm = lambda: GLMClient()
-
+def get_glm() -> ChatOpenAI:
+    return ChatOpenAI(
+        model=os.getenv("GLM_MODEL", "glm-4-plus"),
+        api_key=os.getenv("GLM_API_KEY"),
+        base_url=os.getenv("GLM_BASE_URL"),
+        temperature=0.3,
+    )
 
 # ─────────────────────────────────────────────
 # State
 # ─────────────────────────────────────────────
 class ProactiveState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
+
     anomaly_type: Literal["stock_critical", "kitchen_surge", "none", "unknown"]
-    # Tracks which handler is active so tool_node knows where to return
-    pending_handler: Literal["stock_crisis_handler", "kitchen_surge_handler", "none"]
+    pending_handler: str
+
+    margin_summary: str
+    capacity_summary: str
+    menu_rewrite_summary: str
+    kds_summary: str
+    final_response: str
+
     action_taken: bool
+    node_tool_call_count: int
 
 
 # ─────────────────────────────────────────────
@@ -58,120 +61,189 @@ Respond ONLY with the single classification word. No explanation."""
 
     valid = {"stock_critical", "kitchen_surge", "none"}
     anomaly = classification if classification in valid else "unknown"
+    has_tool = bool(getattr(response, "tool_calls", None))
 
-    return {**state, "anomaly_type": anomaly, "pending_handler": "none"}
+    return {**state, "anomaly_type": anomaly, }
 
 
-# ─────────────────────────────────────────────
-# Node 2a: Stock crisis handler
-# ─────────────────────────────────────────────
-def stock_crisis_handler(state: ProactiveState) -> ProactiveState:
-    """
-    Stock Critical path from diagram:
-    simulate_yield_scenario → formulate_marketing_strategy (Flash Sale)
-    → send_human_notification → execute_operational_action (CREATE_PO)
-    → generate_post_mortem_learning
-    """
+
+# ──────────────────────────────────────────────
+# Tool-handling nodes
+# ──────────────────────────────────────────────
+
+
+def evaluate_margin_node(state: ProactiveState) -> ProactiveState:
     tools = [t for t in get_all_lc_tools() if t.name in [
+        "get_business_state",
         "simulate_yield_scenario",
-        "formulate_marketing_strategy",
-        "send_human_notification",
-        "execute_operational_action",
-        "generate_post_mortem_learning",
-        "contact_supplier",           # for CREATE_PO notification to supplier
-        "get_business_state",         # to read current margin before simulating
     ]]
     llm = get_glm().bind_tools(tools)
 
-    prompt = """STOCK CRITICAL ALERT. Execute the full stock crisis response in sequence:
-
-Step 1 — Evaluate margin:
-  Call get_business_state(scope='inventory') to identify the critical item.
-  Call simulate_yield_scenario on the most affected menu item with action='discount', value=0.25
-  to model the flash sale margin impact.
-
-Step 2 — Launch flash sale:
-  Call formulate_marketing_strategy with:
-    strategy_type = 'FLASH_SALE'
-    goal = 'clear_stock'
-    config = { discount: 0.25, audience: 'all', budget: 50 }
-
-Step 3 — Notify operator:
-  Call send_human_notification with priority='high'. Include: item name, current qty,
-  flash sale campaign_id, margin impact from simulation, and recommended PO.
-
-Step 4 — Log the purchase order:
-  Call execute_operational_action with action_type='CREATE_PO'.
-  Call contact_supplier with message_type='emergency_restock' for the primary supplier.
-
-Step 5 — Post-mortem:
-  Call generate_post_mortem_learning to close the audit trail."""
+    prompt = """
+STOCK CRITICAL: Evaluate margin impact.
+Call get_business_state(scope='inventory').
+Then call simulate_yield_scenario only if you can identify the affected menu item.
+Summarize the margin impact.
+"""
 
     response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
+    has_tool = bool(getattr(response, "tool_calls", None))
+
     return {
         **state,
         "messages": [response],
-        "pending_handler": "stock_crisis_handler",
+        "pending_handler": "evaluate_margin",
+        "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
+
+    }
+
+
+def flash_sale_node(state: ProactiveState) -> ProactiveState:
+    tools = [t for t in get_all_lc_tools() if t.name == "formulate_marketing_strategy"]
+    llm = get_glm().bind_tools(tools)
+
+    prompt = """
+Launch a controlled FLASH_SALE to clear critical stock.
+Call formulate_marketing_strategy with:
+strategy_type='FLASH_SALE'
+goal='clear_stock'
+config={discount:0.25, audience:'all', budget:50}
+"""
+
+    response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
+    has_tool = bool(getattr(response, "tool_calls", None))
+
+    return {
+        **state,
+        "messages": [response],
+        "pending_handler": "flash_sale",
+        "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
+    }
+
+
+def notify_frontend_log_node(state: ProactiveState) -> ProactiveState:
+    tools = [t for t in get_all_lc_tools() if t.name in [
+        "send_human_notification",
+        "execute_operational_action",
+        "contact_supplier",
+    ]]
+    llm = get_glm().bind_tools(tools)
+
+    prompt = """
+Before calling contact_supplier, only use supplier_id if it is a valid UUID from tool results.
+Do NOT invent supplier IDs like SUP-001.
+If no UUID is known:
+use send_human_notification instead and ask the operator to confirm the supplier.
+If got a valid UUID:
+Notify operator and log operational action.
+Use send_human_notification(priority='high').
+If restock is needed, call execute_operational_action(action_type='CREATE_PO').
+If supplier contact is needed, call contact_supplier(message_type='emergency_restock').
+"""
+
+    response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
+    has_tool = bool(getattr(response, "tool_calls", None))
+
+    return {
+        **state,
+        "messages": [response],
+        "pending_handler": "notify_frontend_log",
+        "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
         "action_taken": True,
     }
 
 
-# ─────────────────────────────────────────────
-# Node 2b: Kitchen surge handler
-# ─────────────────────────────────────────────
-def kitchen_surge_handler(state: ProactiveState) -> ProactiveState:
-    """
-    Kitchen Surge path from diagram:
-    check_operational_capacity → get_all_menu_items (find substitutes)
-    → execute_operational_action (UPDATE_MENU — rewrite to alt ingredient)
-    → save_to_kds (Alert KDS + resequence with ETAs)
-    → send_human_notification
-    → generate_post_mortem_learning (Log + post-mortem)
-    """
+def check_capacity_node(state: ProactiveState) -> ProactiveState:
     tools = [t for t in get_all_lc_tools() if t.name in [
+        "get_business_state",
         "check_operational_capacity",
-        "get_all_menu_items",
-        "execute_operational_action",   # UPDATE_MENU to switch ingredient
-        "save_to_kds",                  # Alert KDS + resequence
-        "send_human_notification",
-        "generate_post_mortem_learning",
-        "get_business_state",           # read current kitchen_load
     ]]
     llm = get_glm().bind_tools(tools)
 
-    prompt = """KITCHEN SURGE DETECTED. Execute the full kitchen surge response in sequence:
-
-Step 1 — Validate bottleneck:
-  Call get_business_state(scope='ops') to get current kitchen_load_percent and pending_orders.
-  Call check_operational_capacity with:
-    projected_order_surge = pending_orders (from ops state)
-    complexity_factor = 3 (assume medium complexity)
-
-Step 2 — Find substitutes and rewrite menu:
-  Call get_all_menu_items() to find fast-prep alternative dishes in the same category
-  as the item causing the bottleneck.
-  Call execute_operational_action with action_type='UPDATE_MENU' to temporarily
-  mark slow items as unavailable and feature the fast-prep alternatives.
-
-Step 3 — Alert KDS and resequence:
-  Call save_to_kds for the updated menu instructions with:
-    priority = 'urgent'
-    agent_note = brief instruction to kitchen (e.g. 'Surge detected. Switch to noodle base.')
-    estimated_prep_minutes = reduced estimate for the fast-prep alternatives
-
-Step 4 — Notify operator:
-  Call send_human_notification with priority='high'. Include: surge magnitude,
-  menu changes made, KDS entry ID, recommended_staff_addition from capacity check.
-
-Step 5 — Post-mortem:
-  Call generate_post_mortem_learning to log this surge event."""
+    prompt = """
+KITCHEN SURGE: Validate bottleneck.
+Call get_business_state(scope='ops').
+Then call check_operational_capacity using pending_orders as projected_order_surge and complexity_factor=3.
+"""
 
     response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
+    has_tool = bool(getattr(response, "tool_calls", None))
+
     return {
         **state,
         "messages": [response],
-        "pending_handler": "kitchen_surge_handler",
+        "pending_handler": "check_capacity",
+        "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
+    }
+
+
+def rewrite_menu_node(state: ProactiveState) -> ProactiveState:
+    tools = [t for t in get_all_lc_tools() if t.name in [
+        "get_all_menu_items",
+        "execute_operational_action",
+    ]]
+    llm = get_glm().bind_tools(tools)
+
+    prompt = """
+Rewrite menu for kitchen surge.
+Call get_all_menu_items to find faster-prep alternatives.
+Then call execute_operational_action(action_type='UPDATE_MENU') to temporarily feature fast-prep alternatives or hide slow items.
+"""
+
+    response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
+    has_tool = bool(getattr(response, "tool_calls", None))
+
+    return {
+        **state,
+        "messages": [response],
+        "pending_handler": "rewrite_menu",
+        "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
+    }
+
+
+def alert_kds_node(state: ProactiveState) -> ProactiveState:
+    tools = [t for t in get_all_lc_tools() if t.name in [
+        "save_to_kds",
+        "send_human_notification",
+    ]]
+    llm = get_glm().bind_tools(tools)
+
+    prompt = """
+Alert KDS and notify operator.
+Call save_to_kds with priority='urgent'.
+Then call send_human_notification(priority='high') summarizing surge, menu changes, and KDS action.
+"""
+
+    response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
+    has_tool = bool(getattr(response, "tool_calls", None))
+
+    return {
+        **state,
+        "messages": [response],
+        "pending_handler": "alert_kds",
+        "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
         "action_taken": True,
+    }
+
+
+def postmortem_node(state: ProactiveState) -> ProactiveState:
+    tools = [t for t in get_all_lc_tools() if t.name == "generate_post_mortem_learning"]
+    llm = get_glm().bind_tools(tools)
+
+    prompt = """
+Close the audit trail.
+Call generate_post_mortem_learning for this proactive event.
+"""
+
+    response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
+    has_tool = bool(getattr(response, "tool_calls", None))
+
+    return {
+        **state,
+        "messages": [response],
+        "pending_handler": "postmortem",
+        "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
+        "final_response": "Proactive response completed and logged.",
     }
 
 
@@ -179,38 +251,45 @@ Step 5 — Post-mortem:
 # Routing functions
 # ─────────────────────────────────────────────
 def route_anomaly(state: ProactiveState) -> str:
-    if state["anomaly_type"] == "stock_critical":
-        return "stock_crisis_handler"
-    if state["anomaly_type"] == "kitchen_surge":
-        return "kitchen_surge_handler"
+    if state.get("anomaly_type") == "stock_critical":
+        return "evaluate_margin"
+    if state.get("anomaly_type") == "kitchen_surge":
+        return "check_capacity"
     return END
 
 
 def route_tools(state: ProactiveState) -> str:
-    """
-    KEY FIX: After tool_node executes, route back to whichever handler
-    is still active (pending_handler), not to END.
-    This implements the tool-call loop shown in the diagram.
-    """
     last = state["messages"][-1]
-    if hasattr(last, "tool_calls") and last.tool_calls:
+
+    if getattr(last, "tool_calls", None):
+        if state.get("node_tool_call_count", 0) >= 4:
+            return "__next__"
         return "tool_node"
-    return END
+
+    return "__next__"
 
 
 def route_after_tools(state: ProactiveState) -> str:
-    """
-    Routes tool_node output back to the correct handler.
-    Without this, tool results are never interpreted — the handler that
-    requested the tool never sees the response.
-    """
     handler = state.get("pending_handler", "none")
-    if handler == "stock_crisis_handler":
-        return "stock_crisis_handler"
-    if handler == "kitchen_surge_handler":
-        return "kitchen_surge_handler"
-    return END
 
+    if handler == "evaluate_margin":
+        return "flash_sale"
+    if handler == "flash_sale":
+        return "notify_frontend_log"
+    if handler == "notify_frontend_log":
+        return "postmortem"
+
+    if handler == "check_capacity":
+        return "rewrite_menu"
+    if handler == "rewrite_menu":
+        return "alert_kds"
+    if handler == "alert_kds":
+        return "postmortem"
+
+    if handler == "postmortem":
+        return END
+
+    return END
 
 # ─────────────────────────────────────────────
 # Build graph
@@ -218,34 +297,69 @@ def route_after_tools(state: ProactiveState) -> str:
 def build_proactive_graph():
     builder = StateGraph(ProactiveState)
 
-    builder.add_node("anomaly_classifier",    anomaly_classifier_node)
-    builder.add_node("stock_crisis_handler",  stock_crisis_handler)
-    builder.add_node("kitchen_surge_handler", kitchen_surge_handler)
-    builder.add_node("tool_node",             ToolNode(get_all_lc_tools()))
+    builder.add_node("anomaly_classifier", anomaly_classifier_node)
+
+    builder.add_node("evaluate_margin", evaluate_margin_node)
+    builder.add_node("flash_sale", flash_sale_node)
+    builder.add_node("notify_frontend_log", notify_frontend_log_node)
+
+    builder.add_node("check_capacity", check_capacity_node)
+    builder.add_node("rewrite_menu", rewrite_menu_node)
+    builder.add_node("alert_kds", alert_kds_node)
+
+    builder.add_node("postmortem", postmortem_node)
+    builder.add_node("tool_node", ToolNode(get_all_lc_tools()))
 
     builder.add_edge(START, "anomaly_classifier")
 
     builder.add_conditional_edges("anomaly_classifier", route_anomaly, {
-        "stock_crisis_handler":  "stock_crisis_handler",
-        "kitchen_surge_handler": "kitchen_surge_handler",
-        END:                     END,
+        "evaluate_margin": "evaluate_margin",
+        "check_capacity": "check_capacity",
+        END: END,
     })
 
-    # Both handlers: if they emit tool_calls → tool_node, else → END
-    builder.add_conditional_edges("stock_crisis_handler",  route_tools, {
+    builder.add_conditional_edges("evaluate_margin", route_tools, {
         "tool_node": "tool_node",
-        END:         END,
-    })
-    builder.add_conditional_edges("kitchen_surge_handler", route_tools, {
-        "tool_node": "tool_node",
-        END:         END,
+        "__next__": "flash_sale",
     })
 
-    # KEY FIX: tool_node routes back to whoever called it
+    builder.add_conditional_edges("flash_sale", route_tools, {
+        "tool_node": "tool_node",
+        "__next__": "notify_frontend_log",
+    })
+
+    builder.add_conditional_edges("notify_frontend_log", route_tools, {
+        "tool_node": "tool_node",
+        "__next__": "postmortem",
+    })
+
+    builder.add_conditional_edges("check_capacity", route_tools, {
+        "tool_node": "tool_node",
+        "__next__": "rewrite_menu",
+    })
+
+    builder.add_conditional_edges("rewrite_menu", route_tools, {
+        "tool_node": "tool_node",
+        "__next__": "alert_kds",
+    })
+
+    builder.add_conditional_edges("alert_kds", route_tools, {
+        "tool_node": "tool_node",
+        "__next__": "postmortem",
+    })
+
+    builder.add_conditional_edges("postmortem", route_tools, {
+        "tool_node": "tool_node",
+        "__next__": END,
+    })
+
     builder.add_conditional_edges("tool_node", route_after_tools, {
-        "stock_crisis_handler":  "stock_crisis_handler",
-        "kitchen_surge_handler": "kitchen_surge_handler",
-        END:                     END,
+        "flash_sale": "flash_sale",
+        "notify_frontend_log": "notify_frontend_log",
+        "postmortem": "postmortem",
+        "rewrite_menu": "rewrite_menu",
+        "alert_kds": "alert_kds",
+        END: END,
     })
 
     return builder.compile()
