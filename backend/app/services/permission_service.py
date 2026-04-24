@@ -15,6 +15,7 @@ def _get_config():
             "allow_auto_po_creation": True,
             "allow_auto_inventory_adjust": True,
             "allow_auto_marketing_campaign": False,
+            "allow_auto_recruitment": False,
             "max_price_change_percent": 15.0,
             "max_spend_amount": 500.0,
             "max_discount_percent": 30.0,
@@ -67,6 +68,10 @@ def check_action_permission(action_type: str, payload: dict) -> tuple[bool, str]
     elif action_type == "INVENTORY_ADJUST":
         if not cfg.get("allow_auto_inventory_adjust"):
             return False, "Approval required: Auto inventory adjust is globally disabled."
+        
+    elif action_type == "RECRUIT_STAFF":
+        if not cfg.get("allow_auto_recruitment"):
+            return False, "Approval required: Auto recruitment is globally disabled."
 
     # Can be scaled to additional action_type
     return True, "Allowed"

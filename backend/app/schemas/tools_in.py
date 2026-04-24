@@ -57,7 +57,7 @@ class ActionPayload(BaseModel):
 
 class ExecuteOperationalActionInput(BaseModel):
     """The primary write-tool for UPDATE_MENU, CREATE_PURCHASE_ORDER, or INVENTORY_CORRECTION."""
-    action_type: Literal["UPDATE_MENU", "CREATE_PO", "INVENTORY_ADJUST", "ALERT_KDS"]
+    action_type: Literal["UPDATE_MENU", "CREATE_PO", "INVENTORY_ADJUST", "ALERT_KDS","RECRUIT_STAFF"]
     payload: ActionPayload 
     p_logic_summary: str = Field(..., description="Reasoning trace from P-Agent.") 
     r_logic_summary: str = Field(..., description="Reasoning trace from R-Agent.") 
@@ -112,12 +112,15 @@ class GetAllMenuItemsInput(BaseModel):
     """Retrieves the full active menu with pricing and margin data."""
     filter_category: Optional[str] = Field(
         None,
-        description="Optional category filter e.g. 'mains', 'drinks', 'desserts'. Omit to get all."
+        description="Optional category filter e.g. 'dairy', 'vegetables', 'dry goods', 'dessert', 'meat', 'beverages', 'seafood'. Omit to get all."
     )
     include_unavailable: bool = Field(
         False,
         description="Set True to include items currently marked unavailable. Default False."
     )
+class GetMenuPricingSnapshotInput(BaseModel):
+    include_unavailable: bool = False
+    category_filter: Optional[str] = None
 
 
 # ==========================================

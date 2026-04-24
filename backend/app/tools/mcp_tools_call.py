@@ -20,7 +20,7 @@ def get_all_lc_tools() -> list:
             get_all_menu_items,
             contact_supplier,
             save_to_kds,
-            
+            get_menu_pricing_snapshot
         ]
     
 

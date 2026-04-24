@@ -174,10 +174,22 @@ class MenuItem(BaseModel):
     is_available: bool
     ingredients: List[IngredientDetail] = []  # links back to inventory for stock checks
     # qty: number, item_name: string
+class MenuItemSnapshot(BaseModel):
+    item_id: str
+    name:str
+    category: str
+    current_price: float
+    margin_percent: float
+    is_available: bool
  
 class GetAllMenuItemsOutput(BaseModel):
     """Output for get_all_menu_items"""
     items: List[MenuItem]
+    total_count: int
+    
+class GetMenuPricingSnapshotOutput(BaseModel):
+    """Output for get_all_menu_items"""
+    items: List[MenuItemSnapshot]
     total_count: int
  
  

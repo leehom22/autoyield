@@ -2,6 +2,7 @@ import random
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List
+import postgrest.exceptions
 import httpx
 
 from app.core.supabase import supabase
@@ -22,8 +23,28 @@ from app.engine.simulator import get_current_simulated_time
 @tool
 async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateOutput:
     """
-    Retrieve real-time snapshots of business state.
-    scope: 'inventory' | 'finance' | 'ops'
+    Retrieves real-time operational, financial, or inventory data from the restaurant's 
+    core engine to assist in decision-making and risk assessment.
+
+    Use this tool when you need to answer questions about the current status of the 
+    restaurant's resources, performance, or potential bottlenecks.
+
+    Args:
+        params (GetBusinessStateInput): Contains the 'scope' which determines the type of data:
+            - 'inventory': Returns a list of stock items with 'expiry_risk_score'. 
+              A score of 1.0 indicates high risk (expires in <= 2 days). Use this to 
+              identify ingredients that need to be used immediately or discarded.
+            - 'finance': Provides a snapshot of daily/weekly revenue, margin averages, 
+              and total inventory value. Use this to assess profitability or detect 
+              abnormal burn rates.
+            - 'ops': Returns current staffing levels, pending order counts, and kitchen load. 
+              Crucial for identifying 'bottleneck_roles' and 'staff_shortage_risk' 
+              during peak hours or festival events.
+
+    Returns:
+        GetBusinessStateOutput: A structured response containing the requested state data.
+        All financial figures are rounded to 2 decimal places. Load percentages represent 
+        the ratio of active tasks to staff capacity.
     """
     from app.engine.simulator import get_current_simulated_time
 
@@ -73,7 +94,11 @@ async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateO
         avg_load = sum(r["current_load"] for r in roster.data) / len(roster.data) if roster.data else 0.0
         shortage_risk, bottleneck_role = "low", None
         for r in roster.data:
-            load_ratio = r["current_load"] / r["max_capacity_score"] if r["max_capacity_score"] else 0
+            # Safely fetch values with defaults (0 for load, 1 for capacity to avoid division by zero)
+            current_load = r.get("current_load", 0)
+            max_capacity = r.get("max_capacity_score", 1) # Default to 1 to avoid DivisionByZero
+
+            load_ratio = current_load / max_capacity if max_capacity else 0
             if load_ratio > 0.9:
                 shortage_risk, bottleneck_role = "high", r["role"]
                 break
@@ -136,10 +161,22 @@ async def get_business_state(params: GetBusinessStateInput) -> GetBusinessStateO
 @tool
 async def simulate_yield_scenario(params: SimulateYieldScenarioInput) -> SimulateYieldScenarioOutput:
     """
-        Simulate the profit impact of a price change or bundle deal.
-        action: 'discount' | 'bundle'
-        value: discount percentage (0-100) or bundle price
-        """
+    Simulates the financial impact of pricing strategies (discounts or bundles) on a specific menu item.
+    
+    Use this tool to perform 'What-If' analysis before changing prices. It helps determine if a 
+    volume increase can offset a lower margin.
+    
+    Args:
+        params (SimulateYieldScenarioInput):
+            - item_id: The ID of the menu item to analyze.
+            - action: 'discount' (percentage-based) or 'bundle' (fixed price point).
+            - value: If action is 'discount', use 0.0-1.0 (e.g., 0.2 for 20% off). 
+                     If 'bundle', use the total target price.
+    
+    Returns:
+        A recommendation based on profit maintenance. 'break_even_volume_increase' 
+        indicates how many more units must be sold to maintain the current profit level.
+    """
     res = supabase.table("menu_items").select("current_price, margin_percent").eq("id", params.item_id).execute()
     if not res.data:
         return SimulateYieldScenarioOutput(projected_revenue_change=0.0, new_margin=0.0, break_even_volume_increase=0.0)
@@ -177,37 +214,103 @@ async def simulate_yield_scenario(params: SimulateYieldScenarioInput) -> Simulat
     )
 
 @tool
-async def evaluate_supply_chain_options(params: EvaluateSupplyChainOptionsInput) -> EvaluateSupplyChainOptionsOutput:
+async def evaluate_supply_chain_options(params: EvaluateSupplyChainOptionsInput) -> str: # Return a string for better LLM parsing
     """
-        Compare all suppliers for a given inventory item by total landed cost vs reliability.
+    Compares available suppliers for an inventory item. 
+    Returns ranked options with Supplier Names, Costs, and Reliability.
     """
-    # 1. Retrieve base cost of item from inventory
-    item_res = supabase.table("inventory").select("unit_cost").eq("id", params.item_id).execute()
-    if not item_res.data:
-        return EvaluateSupplyChainOptionsOutput(options=[])
-    base_cost = float(item_res.data[0]["unit_cost"])
+    # 1. Retrieve base cost
+    try:
+        item_res = supabase.table("inventory").select("unit_cost").eq("id", params.item_id).execute()
+        if not item_res.data:
+            return f"Error: Item ID {params.item_id} not found in inventory."
+        base_cost = float(item_res.data[0]["unit_cost"])
+    except Exception as e:
+        return f"Database Error: {str(e)}"
+
+    # 2. Retrieve suppliers (Added 'name' to the select!)
+    # Tip: In a real app, you'd join with a 'supplier_items' table here
+    res = supabase.table("suppliers").select("id, name, avg_lead_time, reliability_score").execute()
     
-    # 2. Retrieve all suppliers
-    res = supabase.table("suppliers").select("id, avg_lead_time, reliability_score").execute()
-    options = []
+    if not res.data:
+        return "No suppliers found in the database."
+
+    processed_options = []
     for s in res.data:
-        # Cost = base cost + logistic surcharge (higher if reliability is low)
-        logistics_surcharge = base_cost * (1.0 - s["reliability_score"]) * settings.LOGISTICS_SURCHARGE_FACTOR
+        # Logistic surcharge calculation
+        logistics_surcharge = base_cost * (1.0 - s["reliability_score"]) * 1.5 # Using a constant or settings
         total_landed_cost = base_cost + logistics_surcharge
-        options.append(SupplyChainOption(
-            supplier_id=s["id"],
-            total_landed_cost=round(total_landed_cost, 2),
-            reliability_index=s["reliability_score"],
-            estimated_delivery=s["avg_lead_time"]
-        ))
-    return EvaluateSupplyChainOptionsOutput(options=options)
+        
+        processed_options.append({
+            "supplier_name": s["name"],
+            "supplier_id": s["id"],
+            "total_cost_rm": round(total_landed_cost, 2),
+            "reliability": f"{int(s['reliability_score'] * 100)}%",
+            "lead_time_days": s["avg_lead_time"]
+        })
+
+    # Sort by cost (cheapest first)
+    processed_options.sort(key=lambda x: x["total_cost_rm"])
+
+    # 3. Return as a clean, readable string/JSON
+    import json
+    return json.dumps(processed_options[:5]) # Limit to top 5 to prevent context overflow
+# @tool
+# async def evaluate_supply_chain_options(params: EvaluateSupplyChainOptionsInput) -> EvaluateSupplyChainOptionsOutput:
+#     """
+#     Compares available suppliers for an inventory item based on 'Total Landed Cost' and Reliability.
+    
+#     Use this tool when inventory is low or when the 'finance' scope indicates high burn rates.
+#     It calculates a logistics surcharge based on a supplier's reliability score to provide 
+#     the true cost of procurement.
+    
+#     Args:
+#         params (EvaluateSupplyChainOptionsInput): The unique item_id from the inventory table.
+        
+#     Returns:
+#         A list of options ranked by cost. High reliability_index reduces the risk of 
+#         stockouts but may come at a higher landed cost.
+#     """
+#     # 1. Retrieve base cost of item from inventory
+#     try:
+#         item_res = supabase.table("inventory").select("unit_cost").eq("id", params.item_id).execute()
+#     except postgrest.exceptions.APIError as e:
+#         return f"ERROR: Invalid UUID format provided ({params.item_id}). Please check the item ID and try again."
+#     if not item_res.data:
+#         return EvaluateSupplyChainOptionsOutput(options=[])
+#     base_cost = float(item_res.data[0]["unit_cost"])
+    
+#     # 2. Retrieve all suppliers
+#     res = supabase.table("suppliers").select("id, avg_lead_time, reliability_score").execute()
+#     options = []
+#     for s in res.data:
+#         # Cost = base cost + logistic surcharge (higher if reliability is low)
+#         logistics_surcharge = base_cost * (1.0 - s["reliability_score"]) * settings.LOGISTICS_SURCHARGE_FACTOR
+#         total_landed_cost = base_cost + logistics_surcharge
+#         options.append(SupplyChainOption(
+#             supplier_id=s["id"],
+#             total_landed_cost=round(total_landed_cost, 2),
+#             reliability_index=s["reliability_score"],
+#             estimated_delivery=s["avg_lead_time"]
+#         ))
+#     return EvaluateSupplyChainOptionsOutput(options=options)
 
 @tool
 async def check_operational_capacity(params: CheckOperationalCapacityInput) -> CheckOperationalCapacityOutput:
     """
-        Validate if current staff can handle a projected order surge.
-        projected_order_surge: expected additional orders
-        complexity_factor: 1 (simple) to 5 (very complex dishes)
+        Predicts the feasibility of handling a projected surge in orders based on current staff load.
+        
+        Use this tool before approving promotional campaigns or during festival planning to 
+        ensure the kitchen won't reach a breaking point (95% load).
+        
+        Args:
+            params (CheckOperationalCapacityInput):
+                - projected_order_surge: Number of extra orders expected.
+                - complexity_factor: 1.0 (standard) to 5.0 (labor-intensive prep).
+                
+        Returns:
+            Feasibility status and the number of additional staff members required to 
+            bring the projected load back down to the 80% safety threshold.
     """
     # """
     # R-Agent Reasoning Note:
@@ -232,9 +335,41 @@ async def check_operational_capacity(params: CheckOperationalCapacityInput) -> C
 @tool
 async def execute_operational_action(params: ExecuteOperationalActionInput) -> ExecuteOperationalActionOutput:
     """
-        Write tool — executes UPDATE_MENU, CREATE_PO (purchase order), or INVENTORY_ADJUST.
-        action_type: 'UPDATE_MENU' | 'CREATE_PO' | 'INVENTORY_ADJUST'
-        payload: { target_id, new_value }
+    The primary 'Write' tool for the restaurant system. Executes INTERNAL operational changes only.
+    
+    Use ONLY for:
+    - Permanent menu price updates
+    - Inventory adjustments
+    - Purchase orders
+    - Kitchen alerts
+    - Recruitment actions
+
+    Examples:
+    - Permanently raise burger price by RM2
+    - Adjust inventory stock count
+    - Create supplier PO
+    - Recruit 2 more staff 
+
+    DO NOT use for temporary promotions, flash sales, coupons, or marketing campaigns.
+    Those must use formulate_marketing_strategy.
+    
+    CRITICAL: This tool requires permission checks. Actions that exceed safety thresholds 
+    will be paused for 'Human-in-the-loop' approval via the notifications table.
+    
+    Args:
+        params (ExecuteOperationalActionInput):
+            - action_type: 
+                'UPDATE_MENU': Change prices or item descriptions.
+                'CREATE_PO': Generate a Purchase Order for suppliers.
+                'INVENTORY_ADJUST': Manual correction of stock levels.
+                'ALERT_KDS': Send a high-priority event to the Kitchen Display System.
+                'RECRUIT_STAFF': Recruitement of new staff members.
+            - payload: Dictionary containing target_id and the new_value object.
+            - logic_summary: Short justification from the Planning/Reasoning agents for the decision log.
+            
+    Returns:
+        Status of 'success', 'failed', or 'pending_approval'. 
+        If 'pending_approval', the agent should inform the user that a request has been sent to their dashboard.
     """
 
     allowed, reason = check_action_permission(params.action_type, params.payload.model_dump())
@@ -297,7 +432,11 @@ async def execute_operational_action(params: ExecuteOperationalActionInput) -> E
         elif params.action_type == "ALERT_KDS":
             supabase.table("kds_events").insert(params.payload.new_value).execute()
             status = "success"
-            
+        
+        elif params.action_type == "RECRUIT_STAFF":
+            supabase.table("staff_roster").insert(params.payload.new_value).execute()
+            status = "success"
+        
         if status == "success":
             supabase.table("decision_logs").insert({
                 "trigger_signal": params.action_type,
@@ -320,10 +459,30 @@ async def execute_operational_action(params: ExecuteOperationalActionInput) -> E
 @tool
 async def formulate_marketing_strategy(params: FormulateMarketingStrategyInput) -> FormulateMarketingStrategyOutput:
     """
-        Trigger a targeted marketing campaign.
-        strategy_type: 'VOUCHER' | 'FLASH_SALE' | 'AD_BOOST'
-        goal: 'clear_stock' | 'maximize_margin'
-        config: { discount, audience, budget }
+        Creates TEMPORARY customer-facing promotional campaigns.
+
+        Use for:
+        - Limited-time discounts
+        - Flash sales
+        - Coupons
+        - Bundle promotions
+        - Advertising campaigns
+
+        Examples:
+        - Friday 20% noodle flash sale
+        - Weekend combo voucher
+        - Instagram ad boost
+
+        DO NOT use for permanent menu pricing changes.
+
+        Args:
+            strategy_type: 'VOUCHER' (direct discount), 'FLASH_SALE' (time-limited), 'AD_BOOST' (visibility).
+            goal: 'clear_stock' (prioritize volume) or 'maximize_margin' (prioritize profit).
+            config: Includes budget and target audience constraints.
+
+        Returns:
+            A unique campaign_id and estimated reach. Note: High-budget campaigns (> RM500) 
+            may trigger a human approval requirement in subsequent steps.
     """
     supabase.table("marketing_campaigns").insert({
         "type": params.strategy_type,
@@ -341,9 +500,21 @@ async def formulate_marketing_strategy(params: FormulateMarketingStrategyInput) 
 @tool
 async def send_human_notification(params: SendHumanNotificationInput) -> SendHumanNotificationOutput:
     """
-        Send an Approve/Reject notification to the human operator for high-stakes decisions.
-        priority: 'high' | 'medium'
-        Use for: spending > RM500, price changes > 15%, or irreversible actions.
+    Escalates high-stakes or irreversible decisions to a human operator for approval.
+
+    MANDATORY USE CASES:
+    - Any expenditure or marketing budget > RM500.
+    - Menu price adjustments exceeding 15% of the current price.
+    - Major inventory liquidations or high-priority logistics changes.
+
+    Args:
+        priority: 'high' for immediate financial/operational risks, 'medium' for routine approvals.
+        message: A clear explanation of *why* the action is proposed and the *risk* of inaction.
+        proposed_action_json: The exact payload that will be executed upon approval.
+        channel: 'dashboard' (default), 'whatsapp', or 'email' for urgent escalations.
+
+    Returns:
+        A notification_id used to track the approval status in the 'notifications' table.
     """
     notification_id = str(uuid.uuid4())
     supabase.table("notifications").insert({
@@ -372,8 +543,24 @@ async def send_human_notification(params: SendHumanNotificationInput) -> SendHum
 @tool
 async def generate_post_mortem_learning(params: GeneratePostMortemLearningInput) -> GeneratePostMortemLearningOutput:
     """
-        Compare expected vs actual outcome, write a lesson into the knowledge base.
-        actual_outcome: { revenue, waste_reduced }
+    Conducts a performance analysis of a completed event and updates the Long-Term Memory (Knowledge Base).
+
+    This tool enables the agent to 'learn' by comparing expected vs. actual outcomes. It uses 
+    Z.ai (GLM) embeddings to store the lesson in a vector database for future RAG retrieval.
+
+    Use this after:
+    - A marketing campaign ends.
+    - A festival/holiday period concludes.
+    - A supply chain disruption is resolved.
+
+    Args:
+        event_id: The ID of the completed scenario.
+        actual_outcome: Realized revenue and waste metrics.
+        expected_outcome: (Optional) The initial projection for variance analysis.
+
+    Returns:
+        The lesson learned and a similarity score if this event matched a previous scenario 
+        (Knowledge Deduplication).
     """
     # Vector Degradation Protection: Insert zero vector to pass DB constraints before asynchorously fetching real embedding from external service
     lesson = f"Event {params.event_id} yielded revenue {params.actual_outcome.revenue}."
@@ -434,7 +621,18 @@ async def generate_post_mortem_learning(params: GeneratePostMortemLearningInput)
 @tool
 async def fetch_macro_news(params: FetchMacroNewsInput) -> FetchMacroNewsOutput:
     """
-        Fetch macro news (e.g., supply chain disruptions, festivals) to aid forward-looking reasoning.
+    Fetches external 'Signals' (weather, holidays, logistics news) to provide environmental context.
+
+    Use this tool at the start of a reasoning loop to identify 'Forward-Looking' risks 
+    not found in internal databases. This allows the P-Agent to be proactive rather than reactive.
+
+    Example Signals:
+    - Monsoon/Weather alerts -> Impacts 'supply_chain_options'.
+    - Upcoming Holidays (Mother's Day, Hari Raya) -> Impacts 'operational_capacity'.
+    - Price fluctuations in raw materials -> Impacts 'simulate_yield_scenario'.
+
+    Returns:
+        A list of articles with an 'impact_level' (low, medium, high) to prioritize reasoning.
     """
     # For Hackathon: Return highly relevant mock signals based on real business context
     mock_news = [
@@ -459,8 +657,7 @@ async def fetch_macro_news(params: FetchMacroNewsInput) -> FetchMacroNewsOutput:
 @tool
 async def get_all_menu_items(params: GetAllMenuItemsInput) -> GetAllMenuItemsOutput:
     """
-    Retrieve the full menu with live pricing and margin data.
-    Call this before any decision that touches menu items — promotions, price changes,
+    For category-specific promotions, ALWAYS set filter_category. Avoid fetching the entire menu unless performing a full audit.Call this before any decision that touches menu items — promotions, price changes,
     ingredient substitutions, or demand forecasting per dish.
  
     When to call:
@@ -485,7 +682,7 @@ async def get_all_menu_items(params: GetAllMenuItemsInput) -> GetAllMenuItemsOut
         query = query.eq("is_available", True)
 
     if params.filter_category:
-        query = query.eq("category", params.filter_category)
+        query = query.ilike("category", params.filter_category)
 
     res = query.order("category").execute()
 
@@ -510,6 +707,56 @@ async def get_all_menu_items(params: GetAllMenuItemsInput) -> GetAllMenuItemsOut
     return GetAllMenuItemsOutput(items=items, total_count=len(items))
  
  
+@tool
+async def get_menu_pricing_snapshot(
+    params: GetMenuPricingSnapshotInput
+) -> GetMenuPricingSnapshotOutput:
+    """
+    Returns a compact pricing snapshot for promotion analysis.
+
+    Use this instead of get_all_menu_items when the request is about:
+    - all menu items
+    - storewide discounts
+    - blanket flash sales
+    - full-menu pricing scans
+
+    Output is intentionally compact:
+    - item_id
+    - name
+    - category
+    - current_price
+    - margin_percent
+    - is_available
+    """
+    query = supabase.table("menu_items").select(
+        "id, name, category, current_price, margin_percent, is_available"
+    )
+
+    if not params.include_unavailable:
+        query = query.eq("is_available", True)
+
+    if params.category_filter:
+        query = query.eq("category", params.category_filter)
+
+    res = query.order("category").execute()
+
+    items = [
+        MenuItemSnapshot(
+            item_id=row["id"],
+            name=row["name"],
+            category=row["category"] or "uncategorised",
+            current_price=float(row["current_price"]),
+            margin_percent=float(row["margin_percent"]),
+            is_available=bool(row["is_available"]),
+        )
+        for row in res.data
+    ]
+
+    return GetMenuPricingSnapshotOutput(
+        items=items,
+        total_count=len(items)
+    )
+
 # ─────────────────────────────────────────────────────────────
 # TOOL 2 — contact_supplier
 # ─────────────────────────────────────────────────────────────
@@ -740,36 +987,31 @@ async def get_all_orders(params: GetAllOrdersInput) -> GetAllOrdersOutput:
 async def get_festival_calendar(params: GetFestivalCalendarInput) -> GetFestivalCalendarOutput:
     """
     Look up upcoming Malaysian public holidays and major festivals.
-    Always call this at the start of the Demand Forecasting Loop — festival context
-    is the single biggest explainer for demand anomalies that pure order history misses.
- 
-    When to call:
-    - Before demand forecasting: a festival in the next 7 days changes the entire forecast
-    - Before formulate_marketing_strategy: Hari Raya pre-season = ideal for voucher push
-    - Before check_operational_capacity: festival days need different staffing assumptions
-    - Before contact_supplier with purchase_order: stock up before a demand spike event
- 
-    How to act on demand_impact:
-    - "+X% noodle dishes" → increase noodle reorder trigger by X% for that period
-    - "-Y% lunch covers" (e.g. Hari Raya) → reduce lunch prep, don't over-order perishables
-    - "Iftar dinner 6-8pm" → staff kitchen at 150% from 17:00, ensure rice/protein stocked
- 
-    How to act on staffing_note:
-    - "Muslim staff may request leave" → flag to operator via send_human_notification
-      at least 3 days before the event so they can arrange cover
     """
-    today = datetime.now(timezone.utc).date()
+    from app.engine.simulator import get_current_simulated_time
+
+    sim_now = get_current_simulated_time()
+    today = sim_now.date()
     cutoff = today + timedelta(days=params.days_ahead)
- 
+
     res = supabase.table("festival_calendar").select("*").gte(
         "event_date", today.isoformat()
     ).lte(
         "event_date", cutoff.isoformat()
     ).order("event_date").execute()
- 
+
+    rows = res.data or []
+
+    # fallback: fetch nearest future event if none in range
+    if not rows:
+        fallback = supabase.table("festival_calendar").select("*").gte(
+            "event_date", today.isoformat()
+        ).order("event_date").limit(1).execute()
+        rows = fallback.data or []
+
     events = []
-    for row in res.data:
-        event_date = datetime.fromisoformat(row["event_date"]).date()
+    for row in rows:
+        event_date = datetime.fromisoformat(str(row["event_date"])).date()
         days_away = (event_date - today).days
         events.append(FestivalEvent(
             name=row["name"],
@@ -779,9 +1021,9 @@ async def get_festival_calendar(params: GetFestivalCalendarInput) -> GetFestival
             demand_impact=row.get("demand_impact") if params.include_food_impact else None,
             staffing_note=row.get("staffing_note"),
         ))
- 
+
     nearest = min((e.days_away for e in events), default=999)
- 
+
     return GetFestivalCalendarOutput(events=events, nearest_event_days_away=nearest)
  
  
