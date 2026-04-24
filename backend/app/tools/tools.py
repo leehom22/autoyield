@@ -596,20 +596,29 @@ async def generate_post_mortem_learning(params: GeneratePostMortemLearningInput)
     except Exception as e:
         print(f"RPC match_knowledge_base failed (fallback to insert): {e}")
     
-    if similar.data and similar.data[0]["similarity"] > 0.9:
-        best_match = similar.data[0]
-        supabase.table("knowledge_base").update({
-            "lesson_learned": lesson
-        }).eq("id", best_match["id"]).execute()
-        return GeneratePostMortemLearningOutput(lesson_learned=lesson, embedding_id=best_match["id"], strategy_adjustment=strategy, similarity_score=best_match["similarity"])
+    if similar.data:
 
-    supabase.table("knowledge_base").insert({
-        "embedding_vector": embedding, 
-        "scenario_description": lesson, 
-        "lesson_learned": strategy, 
-        "performance_score": 0.85,
-        "created_at": get_current_simulated_time().isoformat()
-    }).execute()
+        sim_val = similar.data[0].get("similarity", 0)
+
+        try:
+            similarity = float(sim_val)
+        except (TypeError, ValueError):
+            similarity = 0.0
+
+        if similarity > 0.9:
+            best_match = similar.data[0]
+            supabase.table("knowledge_base").update({
+                "lesson_learned": lesson
+            }).eq("id", best_match["id"]).execute()
+            return GeneratePostMortemLearningOutput(lesson_learned=lesson, embedding_id=best_match["id"], strategy_adjustment=strategy, similarity_score=best_match["similarity"])
+
+        supabase.table("knowledge_base").insert({
+            "embedding_vector": embedding, 
+            "scenario_description": lesson, 
+            "lesson_learned": strategy, 
+            "performance_score": 0.85,
+            "created_at": get_current_simulated_time().isoformat()
+        }).execute()
     
     return GeneratePostMortemLearningOutput(
         lesson_learned=lesson,

@@ -4,7 +4,7 @@ test_graphs.py — Test runner for all 4 agent graphs
 Usage:
     python test_graphs.py                    # runs all tests
     python test_graphs.py assistant          # runs only assistant graph tests
-    python test_graphs.py ingestion          # runs only ingestion graph tests
+    python test_graphs.py inventory          # runs only ingestion graph tests
     python test_graphs.py proactive          # runs only proactive graph tests
     python test_graphs.py forecast           # runs only forecast graph tests
 """
@@ -195,7 +195,7 @@ async def test_assistant_graph():
 # INGESTION GRAPH TESTS
 # ─────────────────────────────────────────────
 async def test_ingestion_graph():
-    header("Ingestion Graph")
+    header("Inventory Graph")
 
     from app.graph.inventory_graph import get_ingestion_graph
     graph = get_ingestion_graph()
@@ -211,10 +211,11 @@ async def test_ingestion_graph():
         }
 
     # ── Test 1: Normal restock — price within range
+    # ** Test with success
     state = await stream_graph(
         graph,
         make_state(
-            "Invoice from FreshMarine: 10kg salmon at RM87/kg. "
+            "Invoice from Oceanic Seafood Supply: 10kg salmon at RM87/kg. "
             "Current stored cost is RM85/kg. Delivery date: tomorrow."
         ),
         "Normal restock — price within 20% threshold"
@@ -231,10 +232,11 @@ async def test_ingestion_graph():
         warn("Action not logged — check log_decision_node")
 
     # ── Test 2: Price spike — >20% should trigger supplier evaluation
+    # ** Test with success
     state = await stream_graph(
         graph,
         make_state(
-            "WhatsApp from supplier: salmon price increased to RM115/kg due to shortage. "
+            "Email from supplier: salmon price increased to RM115/kg due to shortage. "
             "Current stored unit cost is RM85/kg. They can deliver 20kg tomorrow."
         ),
         "Price spike — 35% above stored cost (supplier eval + notify expected)"
@@ -473,7 +475,7 @@ async def test_forecast_graph():
 # ─────────────────────────────────────────────
 GRAPH_MAP = {
     "assistant": test_assistant_graph,
-    "ingestion":  test_ingestion_graph,
+    "inventory":  test_ingestion_graph,
     "proactive":  test_proactive_graph,
     "forecast":   test_forecast_graph,
 }

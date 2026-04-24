@@ -1,20 +1,5 @@
 """
 ingestion_graph.py — Inventory Import Analysis flowchart
-
-Covers the second column of the draw.io diagram:
-  Start
-  → get_business_state (get current inventory + price history)
-  → Price spike > 20% vs history?
-      Yes → evaluate_supply_chain_options → simulate_yield_scenario
-           → send_human_notification (Notify operator)
-           → contact_supplier (Email/WhatsApp/Telegram)
-           → execute_operational_action (CREATE_PO)
-           → log decision + trace
-      No  → execute_operational_action (INVENTORY_ADJUST — normal restock)
-           → log decision + trace
-
-Triggered by: parse_unstructured_signal output (invoice OCR, WhatsApp text)
-The caller passes the parsed signal as the first HumanMessage.
 """
 
 from typing import Annotated, TypedDict, Literal
@@ -24,10 +9,16 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from app.tools.mcp_tools_call import get_all_lc_tools
-from app.core.glm_client import GLMClient
+from langchain_openai import ChatOpenAI
+import os
 
-get_glm = lambda: GLMClient()
-
+def get_glm() -> ChatOpenAI:
+    return ChatOpenAI(
+        model=os.getenv("GLM_MODEL", "glm-4-plus"),
+        api_key=os.getenv("GLM_API_KEY"),
+        base_url=os.getenv("GLM_BASE_URL"),
+        temperature=0.3,
+    )
 
 # ─────────────────────────────────────────────
 # State
@@ -41,7 +32,8 @@ class IngestionState(TypedDict):
     # Execution tracking
     supplier_contacted: bool
     action_logged: bool
-
+    pending_handler: str
+    final_response: str
 
 # ─────────────────────────────────────────────
 # System prompt
@@ -76,7 +68,7 @@ Identify which item the signal refers to and note its current stored unit_cost."
 
     response = llm.invoke([SystemMessage(content=INGESTION_SUPERVISOR_PROMPT),
                            SystemMessage(content=prompt)] + state["messages"])
-    return {**state, "messages": [response]}
+    return {**state, "messages": [response],"pending_handler" : "read_inventory"}
 
 
 # ─────────────────────────────────────────────
@@ -160,7 +152,7 @@ Follow this sequence:
 
     response = llm.invoke([SystemMessage(content=INGESTION_SUPERVISOR_PROMPT),
                            SystemMessage(content=prompt)] + state["messages"])
-    return {**state, "messages": [response]}
+    return {**state, "messages": [response],"pending_handler" : "spike_analysis"}
 
 
 # ─────────────────────────────────────────────
@@ -184,7 +176,7 @@ Call execute_operational_action with:
 
     response = llm.invoke([SystemMessage(content=INGESTION_SUPERVISOR_PROMPT),
                            SystemMessage(content=prompt)] + state["messages"])
-    return {**state, "messages": [response]}
+    return {**state, "messages": [response],"pending_handler" : "normal_restock"}
 
 
 # ─────────────────────────────────────────────
@@ -218,7 +210,7 @@ Call contact_supplier with:
 
     response = llm.invoke([SystemMessage(content=INGESTION_SUPERVISOR_PROMPT),
                            SystemMessage(content=prompt)] + state["messages"])
-    return {**state, "messages": [response], "supplier_contacted": True}
+    return {**state, "messages": [response], "supplier_contacted": True,"pending_handler" : "notify_and_contact"}
 
 
 # ─────────────────────────────────────────────
@@ -252,12 +244,32 @@ This closes the audit trail for this ingestion event."""
 
     response = llm.invoke([SystemMessage(content=INGESTION_SUPERVISOR_PROMPT),
                            SystemMessage(content=prompt)] + state["messages"])
-    return {**state, "messages": [response], "action_logged": True}
+    return {**state, "messages": [response], "action_logged": True, "pending_handler" : "log_decision"}
 
 
 # ─────────────────────────────────────────────
 # Routing functions
 # ─────────────────────────────────────────────
+def route_after_tools(state: IngestionState) -> str:
+    handler = state.get("pending_handler", "read_inventory")
+
+    if handler == "read_inventory":
+        return "detect_spike"
+
+    if handler == "spike_analysis":
+        return "notify_and_contact"
+
+    if handler == "normal_restock":
+        return "log_decision"
+
+    if handler == "notify_and_contact":
+        return "log_decision"
+
+    if handler == "log_decision":
+        return END
+
+    return END
+
 def route_tools_ingestion(state: IngestionState) -> str:
     """Standard tool-call checker. Routes to tool_node if LLM requested tools."""
     last = state["messages"][-1]
@@ -313,49 +325,51 @@ def route_after_log(state: IngestionState) -> str:
 def build_ingestion_graph():
     builder = StateGraph(IngestionState)
 
-    builder.add_node("read_inventory",      read_inventory_node)
-    builder.add_node("detect_spike",        detect_spike_node)
-    builder.add_node("spike_analysis",      spike_analysis_node)
-    builder.add_node("normal_restock",      normal_restock_node)
-    builder.add_node("notify_and_contact",  notify_and_contact_node)
-    builder.add_node("log_decision",        log_decision_node)
-    builder.add_node("tool_node",           ToolNode(get_all_lc_tools()))
+    builder.add_node("read_inventory", read_inventory_node)
+    builder.add_node("detect_spike", detect_spike_node)
+    builder.add_node("spike_analysis", spike_analysis_node)
+    builder.add_node("normal_restock", normal_restock_node)
+    builder.add_node("notify_and_contact", notify_and_contact_node)
+    builder.add_node("log_decision", log_decision_node)
+    builder.add_node("tool_node", ToolNode(get_all_lc_tools()))
 
     builder.add_edge(START, "read_inventory")
 
     builder.add_conditional_edges("read_inventory", route_after_read, {
-        "tool_node":    "tool_node",
+        "tool_node": "tool_node",
         "detect_spike": "detect_spike",
     })
 
-    # tool_node after read_inventory loops back to detect_spike
-    # We use a node-level source map for tool_node routing per caller
-    # (simplified: tool_node → detect_spike, since read_inventory is the only pre-detect caller)
-    builder.add_edge("tool_node", "detect_spike")
+    builder.add_conditional_edges("tool_node", route_after_tools, {
+        "detect_spike": "detect_spike",
+        "notify_and_contact": "notify_and_contact",
+        "log_decision": "log_decision",
+        END: END,
+    })
 
     builder.add_conditional_edges("detect_spike", route_after_spike_detect, {
-        "spike_analysis":  "spike_analysis",
-        "normal_restock":  "normal_restock",
+        "spike_analysis": "spike_analysis",
+        "normal_restock": "normal_restock",
     })
 
     builder.add_conditional_edges("spike_analysis", route_after_spike_analysis, {
-        "tool_node":          "tool_node",
+        "tool_node": "tool_node",
         "notify_and_contact": "notify_and_contact",
     })
 
     builder.add_conditional_edges("normal_restock", route_after_normal_restock, {
-        "tool_node":    "tool_node",
+        "tool_node": "tool_node",
         "log_decision": "log_decision",
     })
 
     builder.add_conditional_edges("notify_and_contact", route_after_notify, {
-        "tool_node":    "tool_node",
+        "tool_node": "tool_node",
         "log_decision": "log_decision",
     })
 
     builder.add_conditional_edges("log_decision", route_after_log, {
         "tool_node": "tool_node",
-        END:         END,
+        END: END,
     })
 
     return builder.compile()
