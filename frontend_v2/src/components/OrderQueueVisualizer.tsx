@@ -19,18 +19,22 @@ export default function OrderQueueVisualizer({ sseState }: { sseState: any }) {
   // }, []);
 
   useEffect(() => {
-  // Initial loads recent 30 orders
-  supabase.from('orders').select('*').order('timestamp', { ascending: false }).limit(30)
-    .then(({ data }) => { if (data) setOrders(data); });
+    // Initial loads recent 30 orders
+    supabase.from('orders').select('*').order('timestamp', { ascending: false }).limit(30)
+      .then(({ data }) => { if (data) setOrders(data); });
 
-  const sub = supabase.channel('orders_rt3')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (p) => {
-      setHasSub(true);
-      setOrders((prev) => [p.new as Order, ...prev].slice(0, 30));
-    })
-    .subscribe();
-  return () => { supabase.removeChannel(sub); };
-}, []);
+    const sub = supabase.channel('orders_rt3')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (p) => {
+        setHasSub(true);
+        if (p.eventType === 'INSERT') {
+          setOrders((prev) => [p.new as Order, ...prev].slice(0, 30));
+        } else if (p.eventType === 'DELETE') {
+          setOrders((prev) => prev.filter((o) => o.id !== p.old.id));
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, []);
 
   // Mock order generator when no real data
   // useEffect(() => {

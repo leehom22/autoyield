@@ -7,6 +7,7 @@ from app.services.db_service import get_active_menu, insert_mock_order, get_inve
 from app.core.config import settings
 import random
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -85,27 +86,29 @@ class WorldSimulationEngine:
     async def _async_db_complete(self, order_data: dict):
         try:
             order_id = order_data.get("id")
-            kds_id = order_data.get("kds_id")
-            await asyncio.to_thread(complete_order_in_db, order_id, kds_id)
+            kds_id = order_data.get("kds_uuid")
+            if order_id and kds_id:
+                await asyncio.to_thread(complete_order_in_db, order_id, kds_id)
         except Exception as e:
             logger.error(f"[DB Error] Failed to complete order: {e}")
 
     async def _async_db_insert(self, order_data: dict):
         try:
-            # 1. Insert Order
-            await asyncio.to_thread(insert_mock_order, order_data)
+            # 1. Copy a clean payload
+            db_order_payload = {k: v for k, v in order_data.items() if k != "kds_uuid"}
+            await asyncio.to_thread(insert_mock_order, db_order_payload)
             
-            # 2. Insert KDS
-            import uuid
-            kds_id = str(uuid.uuid4())
-            order_data["kds_uuid"] = kds_id
-            
-            # ETA (Simulate 15 minutes)
-            prep_minutes = int(10 + (len(self.active_order_queue)/2))
+            # 2. Read KDS ID
+            kds_id = order_data.get("kds_uuid")
+            if not kds_id:
+                return
+
+            # 3. Insert kds_queue table
+            prep_minutes = int(10 + (len(self.active_order_queue) / 2))
             eta = (self.simulated_time + timedelta(minutes=prep_minutes)).isoformat()
 
             kds_payload = {
-                "id": kds_id,
+                "id": str(kds_id),
                 "kds_entry_id": f"kds_{order_data['id'][:8]}",
                 "order_id": order_data["id"][-6:], 
                 "items": order_data["items"],
@@ -118,10 +121,11 @@ class WorldSimulationEngine:
             }
             await asyncio.to_thread(insert_kds_entry, kds_payload)
 
-            # 3. Consumption
+            # 4. Consume inventory
             await self._consume_inventory_for_order(order_data)
         except Exception as e:
-            logger.error(f"[DB Error] {e}")
+            logger.error(f"[DB Error] _async_db_insert failed: {e}")
+
 
     async def broadcast_state(self):
         # Broadcast Payload Structure for frontend SSE consumption
@@ -160,21 +164,39 @@ class WorldSimulationEngine:
 
                 if self.tick_count % 10 == 0:
                     self.menu_cache = await asyncio.to_thread(get_active_menu)   # Refresh menu to retrieve agent updates in every 10 ticks
+
+                process_capacity = settings.SIM_ORDER_PROCESS_CAPACITY
+                orders_to_complete = self.active_order_queue[:process_capacity]
+                for po in orders_to_complete:
+                    asyncio.create_task(self._async_db_complete(po))
+                self.active_order_queue = self.active_order_queue[process_capacity:]
                 
                 # 2. Dynamically generate orders based on Velocity in God Mode
                 velocity = SYSTEM_STATE.get("order_velocity_multiplier", 1.0)
-                num_to_generate = int(settings.SIM_BASE_ORDERS_PER_TICK * velocity * random.uniform(0.8, 1.2))   # Base 2 orders per tick, scaled by velocity
+                # num_to_generate = int(settings.SIM_BASE_ORDERS_PER_TICK * velocity * random.uniform(0.8, 1.2))   # Base 2 orders per tick, scaled by velocity
+                # 60% prob to have an order per tick
+                prob = 0.6 * velocity
+                num_to_generate = 0
                 
+                # Prob > 1, generate whole number part
+                num_to_generate += int(prob)
+                if random.random() < (prob - int(prob)):
+                    num_to_generate += 1
+
                 for _ in range(num_to_generate):
                     order_payload = generate_random_order(self.simulated_time)
                     if order_payload:
+                        order_payload["kds_uuid"] = str(uuid.uuid4())
                         self.active_order_queue.append(order_payload)
                         # Store into db
                         asyncio.create_task(self._async_db_insert(order_payload))
 
                 # 3. Simulate order processing (Default as 3 orders per tick)
-                process_capacity = settings.SIM_ORDER_PROCESS_CAPACITY
-                self.active_order_queue = self.active_order_queue[process_capacity:]
+                # process_capacity = settings.SIM_ORDER_PROCESS_CAPACITY
+                # orders_to_complete = self.active_order_queue[:process_capacity]
+                # for po in orders_to_complete:
+                #     asyncio.create_task(self._async_db_complete(po))
+                # self.active_order_queue = self.active_order_queue[process_capacity:]
 
                 # 4. Broadcast current state to SSE clients
                 await self.broadcast_state()
