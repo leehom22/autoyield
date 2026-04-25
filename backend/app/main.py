@@ -136,8 +136,9 @@ async def approve_notification(req: NotificationApproval):
 # Include Routers from existing modules
 # ─────────────────────────────────────────────
 # ! Delete after testing - Temporary endpoint for crisis scenario testing
-from app.api import crisis_test
-app.include_router(crisis_test.router,prefix="/api/test", tags=["Crisis Test"])
+from app.api import crisis_test, schedule_test
+app.include_router(crisis_test.router,prefix="/api/crisis_test", tags=["Crisis Test"])
+app.include_router(schedule_test.router, prefix="/api/forecast-test", tags=["Forecast Test"])
 
 app.include_router(chat.router, prefix="/api", tags=["Chatbot"])
 app.include_router(sandbox.router, prefix="/api/sandbox", tags=["God Mode"])
