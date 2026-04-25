@@ -61,21 +61,26 @@ async def trigger_crisis(payload: GodModePayload):
     # 1. Inventory Adjustment
     if qty_mult != 1.0 or cost_mult != 1.0:
         if payload.inventory_target_id:
-            update_data = {}
-            if qty_mult != 1.0:
-                update_data["qty"] = supabase.raw(f"qty * {qty_mult}")
-            if cost_mult != 1.0:
-                update_data["unit_cost"] = supabase.raw(f"unit_cost * {cost_mult}")
-            if update_data:
-                supabase.table("inventory").update(update_data).eq("id", payload.inventory_target_id).execute()
+            result = supabase.table("inventory").select("qty, unit_cost").eq("id", payload.inventory_target_id).execute()
+            if result.data:
+                item = result.data[0]
+                updates = {}
+                if qty_mult != 1.0:
+                    updates["qty"] = item["qty"] * qty_mult
+                if cost_mult != 1.0:
+                    updates["unit_cost"] = item["unit_cost"] * cost_mult
+                if updates:
+                    supabase.table("inventory").update(updates).eq("id", payload.inventory_target_id).execute()
         else:
-            update_data = {}
-            if qty_mult != 1.0:
-                update_data["qty"] = supabase.raw(f"qty * {qty_mult}")
-            if cost_mult != 1.0:
-                update_data["unit_cost"] = supabase.raw(f"unit_cost * {cost_mult}")
-            if update_data:
-                supabase.table("inventory").update(update_data).execute()
+            items = supabase.table("inventory").select("id, qty, unit_cost").execute()
+            for item in items.data:
+                updates = {}
+                if qty_mult != 1.0:
+                    updates["qty"] = item["qty"] * qty_mult
+                if cost_mult != 1.0:
+                    updates["unit_cost"] = item["unit_cost"] * cost_mult
+                if updates:
+                    supabase.table("inventory").update(updates).eq("id", item["id"]).execute()
 
     # 2. Oil Price Adjustment
     if payload.oil_price_multiplier != 1.0:

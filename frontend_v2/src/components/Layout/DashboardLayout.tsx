@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
-import { Activity, Zap, Boxes, MessageSquare, FileText, Shield, ChevronDown, ChevronUp, LogOut, Terminal, Brain, Play, Pause, Wifi, WifiOff } from 'lucide-react';
+import { Activity, Zap, Boxes, MessageSquare, FileText, Shield, ChevronDown, ChevronUp, LogOut, Terminal, Brain, Play, Pause, Wifi, WifiOff, RotateCcw } from 'lucide-react';
 import ReasoningLogPanel from '../ReasoningLogPanel';
 import ApprovalQueuePanel from '../ApprovalQueuePanel';
 import ErrorLogPanel from '../ErrorLogPanel';
 import HumanAuthorizationPanel from '../HumanAuthorizationPanel';
+import { pauseSimulation, resumeSimulation, fullReset } from '../../lib/api';
 //import { MOCK_SSE_STATE } from '../../lib/mockData';
 
 export type Tab = 'sandbox' | 'operations' | 'agent-io' | 'report';
@@ -14,6 +15,7 @@ export type Tab = 'sandbox' | 'operations' | 'agent-io' | 'report';
 export default function DashboardLayout() {
   const logout = useAuthStore((s) => s.logout);
   const errors = useToastStore((s) => s.errors);
+  const addToast = useToastStore((s) => s.addToast);
   const [activeTab, setActiveTab] = useState<Tab>('sandbox');
   const [termOpen, setTermOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(true);
@@ -48,6 +50,40 @@ export default function DashboardLayout() {
   //   return () => clearInterval(iv);
   // }, [connected]);
 
+  // Helper: toggle pause/resume
+  const handlePauseResume = async () => {
+    try {
+      if (sseState.is_paused) {
+        await resumeSimulation();
+        addToast('success', 'Simulation resumed');
+        // Optimistically update local state
+        setSseState((prev: any) => ({ ...prev, is_paused: false }));
+      } else {
+        await pauseSimulation();
+        addToast('success', 'Simulation paused');
+        setSseState((prev: any) => ({ ...prev, is_paused: true }));
+      }
+    } catch (err: any) {
+      addToast('error', `Failed to ${sseState.is_paused ? 'resume' : 'pause'}: ${err.message}`);
+    }
+  };
+
+  // Helper: full reset
+  const handleFullReset = async () => {
+    const secret = import.meta.env.VITE_ADMIN_SECRET || 'autoyield-reset-2026';
+    try {
+      const result = await fullReset(secret);
+      if (result.status === 'success') {
+        addToast('success', 'Full reset completed. Reloading page...');
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        addToast('error', 'Reset failed: ' + (result.detail || 'Unknown error'));
+      }
+    } catch (err: any) {
+      addToast('error', `Reset error: ${err.message}`);
+    }
+  };
+
   const simTime = sseState.simulated_time ? new Date(sseState.simulated_time) : null;
   const tabs: { key: Tab; icon: any; label: string }[] = [
     { key: 'sandbox', icon: Zap, label: 'Sandbox' },
@@ -72,7 +108,24 @@ export default function DashboardLayout() {
             : <span className="badge badge-green" style={{ fontSize: 9 }}><Play size={9} /> Running</span>}
         </div>
         <div className="sb-section mono text-2">Queue: <span className="text-0">{sseState.queue_length ?? 0}</span></div>
-        <div style={{ marginLeft: 'auto' }} className="sb-section">
+        <div className="sb-section" style={{ marginLeft: 'auto', gap: '8px' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handlePauseResume}
+            style={{ padding: '2px 8px', fontSize: '10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+          >
+            {sseState.is_paused ? <Play size={10} /> : <Pause size={10} />}
+            {sseState.is_paused ? 'Resume' : 'Pause'}
+          </button>
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={handleFullReset}
+            style={{ padding: '2px 8px', fontSize: '10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+          >
+            <RotateCcw size={10} /> Reset
+          </button>
+        </div>
+        <div className="sb-section">
           {connected ? <><Wifi size={11} color="var(--green)" /><span className="text-green" style={{ fontSize: 10 }}>Connected</span></> : <><WifiOff size={11} color="var(--text-2)" /><span className="text-2" style={{ fontSize: 10 }}>Mock</span></>}
         </div>
       </div>

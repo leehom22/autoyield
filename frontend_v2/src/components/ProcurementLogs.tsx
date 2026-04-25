@@ -77,10 +77,14 @@ export default function ProcurementLogs() {
   const fetchLogs = async () => {
     setLoading(true);
     const { data } = await supabase
-      .from('procurement_logs')
-      .select('*, inventory(name), suppliers(name)')
-      .order('created_at', { ascending: false })
-      .limit(20);
+    .from('procurement_logs')
+    .select(`
+      *,
+      inventory:item_id (name),
+      suppliers:supplier_id (name)
+    `)
+    .order('created_at', { ascending: false })
+    .limit(20);
 
     if (data && data.length > 0) {
       const mappedLogs: ProcurementLog[] = data.map((item: any) => ({

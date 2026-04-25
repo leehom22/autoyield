@@ -17,6 +17,7 @@ from app.api import stream, sandbox, agent, webhook
 from app.core.scheduler import start_scheduler, shutdown_scheduler
 from app.api import chat
 from app.api import permission
+from app.api import admin
 
 from app.core.supabase import supabase
 from app.graph.forecast_graph import build_forecast_graph
@@ -140,6 +141,7 @@ app.include_router(agent.router, prefix="/api/agent", tags=["Agent Interact"])
 # app.include_router(webhook.router, prefix="/api/webhooks", tags=["Internal Triggers"])   Currently replaced by crisis_monitor
 app.include_router(stream.router, prefix="/api/stream", tags=["SSE Streaming"])
 app.include_router(permission.router, prefix="/api/permissions", tags=["Authorization Panel"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 @app.get("/health", tags=["System"])
 async def health():
@@ -149,4 +151,6 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     # Start the FastAPI server
+    for route in app.routes:
+        print(route.path)
     uvicorn.run(app, host="127.0.0.1", port=8080)

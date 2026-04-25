@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
 export async function adjustVelocity(multiplier: number) {
   const res = await fetch(`${API_BASE}/api/sandbox/adjust-velocity`, {
@@ -61,6 +61,36 @@ export async function approveNotification(notificationId: string, approved: bool
       approved,
       operator_note: operatorNote
     })
+  });
+  return res.json();
+}
+
+// Pause simulation
+export async function pauseSimulation() {
+  const res = await fetch(`${API_BASE}/api/sandbox/pause`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  return res.json();
+}
+
+// Resume simulation
+export async function resumeSimulation() {
+  const res = await fetch(`${API_BASE}/api/sandbox/resume`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  return res.json();
+}
+
+// Full reset (database + simulation clock)
+export async function fullReset(adminSecret: string) {
+  const res = await fetch(`${API_BASE}/api/admin/full-reset`, {
+    method: 'POST',
+    headers: {
+      'X-Admin-Secret': adminSecret,
+      'Content-Type': 'application/json'
+    }
   });
   return res.json();
 }

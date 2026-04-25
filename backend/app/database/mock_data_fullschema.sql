@@ -1,11 +1,10 @@
--- CREATE OR REPLACE FUNCTION reset_all_data()
--- RETURNS TEXT
--- LANGUAGE plpgsql
--- SECURITY DEFINER
--- AS $$
--- BEGIN
--- (for reset data, save here for backup)
-    -- 1. Disable FK check
+CREATE OR REPLACE FUNCTION reset_all_data()
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- 1. Disable FK checks
     SET session_replication_role = replica;
 
     -- 2. Clear all tables
@@ -27,9 +26,9 @@
         market_trends_history
     CASCADE;
 
-    -- 3. Insert Data
+    -- 3. Insert data (same as your original)
 
-    -- 3.1
+    -- 3.1 Suppliers
     INSERT INTO suppliers (id, name, categories, reliability_score, avg_lead_time, min_order_qty, pricing_tiers, contact_email, contact_phone) VALUES
         ('c11eda48-accf-4898-893c-2958a3ef8bde', 'Oceanic Seafood Supply', ARRAY['Seafood'], 0.95, 12, 20, '{"1-50": 28.5, "201+": 24.0, "51-200": 26.0}'::JSONB, 'user_8939a606@example.com', '+60119545634'),
         ('03704ec1-3ec0-43bb-99f9-fa25b20aa148', 'Prime Meat Co.', ARRAY['Meat'], 0.92, 18, 15, '{"1-30": 42.0, "101+": 36.5, "31-100": 39.0}'::JSONB, 'user_dd08388e@example.com', '+60153399955'),
@@ -40,7 +39,7 @@
         ('5d89dfef-57cc-43fb-8898-f083d686f736', 'Local Artisan Dairy', ARRAY['Dairy','Dessert'], 0.85, 5, 5, '{"1-20": 15.0, "21-50": 14.0}'::JSONB, 'user_9d6673a4@example.com', '+60177410514'),
         ('b46acbb1-e01d-437e-aba6-cfcb5fab07bf', 'Premium Oil & Spice', ARRAY['Dry Goods'], 0.94, 14, 12, '{"81+": 8.2, "1-30": 9.5, "31-80": 8.8}'::JSONB, 'user_5c039ede@example.com', '+60140237257');
 
-    -- 3.2
+    -- 3.2 Inventory
     INSERT INTO inventory (id, name, qty, unit, unit_cost, base_price, current_price, expiry_timestamp, min_stock_level, category, version, created_at) VALUES
         ('a35730d2-5186-44e0-b7ce-2ec1a0d2ea4f', 'Fresh Milk', 32, 'L', 1.2, 2.5, 2.3, '2026-04-21T10:35:51.158437+00:00', 15, 'Dairy', 0, '2026-04-18T10:35:51.158437+00:00'),
         ('e54f47de-ce13-4c6d-a893-e1cd3b4b1e59', 'Olive Oil (Extra Virgin)', 28, 'L', 9.5, 18.0, 17.0, '2026-07-07T10:35:51.158437+00:00', 8, 'Dry Goods', 0, '2026-04-18T10:35:51.158437+00:00'),
@@ -63,7 +62,7 @@
         ('f11a7ad1-57f1-4eec-9f34-12301e9ed21e', 'Lemon Juice', 11.25, 'L', 3.0, 5.5, 5.0, '2026-04-23T10:35:51.158437+00:00', 5, 'Beverages', 0, '2026-04-18T10:35:51.158437+00:00'),
         ('d45ed325-92f8-4c8a-95e4-2a283f00e8e5', 'Parmesan Cheese', 0, 'kg', 15.0, 28.0, 26.0, '2026-04-24T10:35:51.158437+00:00', 3, 'Dairy', 0, '2026-04-18T10:35:51.158437+00:00');
 
-    -- 3.3
+    -- 3.3 Menu items
     INSERT INTO menu_items (id, name, ingredients, base_price, current_price, margin_percent, status, category, created_at, is_available) VALUES
         ('f0111396-7098-40e4-a4dd-f75e7b455744', 'Grilled Salmon', '[{"qty":0.2,"item_name":"Atlantic Salmon Fillet"}]'::JSONB, 45.0, 42.0, 86.43, 'active', 'Main', '2026-04-18T10:35:51.158437+00:00', true),
         ('9ec83a01-9a8a-4438-b0d3-af2e58bed7b7', 'Seabass Aglio Olio', '[{"qty":0.25,"item_name":"Sea Bass Whole"},{"qty":0.15,"item_name":"Spaghetti Pasta"},{"qty":0.02,"item_name":"Olive Oil"},{"qty":0.01,"item_name":"Garlic"}]'::JSONB, 38.0, 36.0, 80.0, 'active', 'Main', '2026-04-18T10:35:51.158437+00:00', true),
@@ -81,7 +80,7 @@
         ('a4679552-dfad-4ed4-b454-b95ca19600d3', 'Lemonade', '[{"qty":0.05,"item_name":"Lemon Juice"}]'::JSONB, 4.5, 4.2, 64.29, 'active', 'Beverage', '2026-04-18T10:35:51.158437+00:00', true),
         ('818f0560-7cf1-406e-829e-b7fae21cb501', 'Vanilla Ice Cream Cup', '[{"qty":0.15,"item_name":"Vanilla Ice Cream"}]'::JSONB, 7.5, 7.0, 80.0, 'active', 'Dessert', '2026-04-18T10:35:51.158437+00:00', true);
 
-    -- 3.4
+    -- 3.4 Staff roster
     INSERT INTO staff_roster (id, name, role, hourly_rate, shift_start, shift_end, max_capacity_score, current_load) VALUES
         ('0760c26f-b01d-4710-af0e-6498b5fa6454', 'James Wong', 'Head Chef', 35.0, '2026-04-18T00:00:00+00:00', '2026-04-18T12:00:00+00:00', 0.95, 0.70),
         ('4db9850a-aaad-41c4-9b65-a6b0e0284808', 'Sarah Lim', 'Sous Chef', 28.0, '2026-04-18T04:00:00+00:00', '2026-04-18T14:00:00+00:00', 0.90, 0.60),
@@ -94,7 +93,7 @@
         ('2e648992-e6c6-4ad8-b186-54b0b8c73555', 'Priya K', 'Server', 8.5, '2026-04-18T03:00:00+00:00', '2026-04-18T12:00:00+00:00', 0.82, 0.75),
         ('71192aa3-e00a-4963-a094-18ebb8923aeb', 'Chen Hao', 'Server', 8.5, '2026-04-18T09:00:00+00:00', '2026-04-18T17:00:00+00:00', 0.82, 0.60);
 
-    -- 3.5
+    -- 3.5 Market trends
     INSERT INTO market_trends_history (id, indicator, value, recorded_at) VALUES
         ('eafeb734-724f-4492-97d0-994dbb646a54', 'oil_price', 82.5, '2026-04-11T10:35:51.158437+00:00'),
         ('79d66150-d430-4e23-ae85-89b011f48dff', 'oil_price', 83.1, '2026-04-12T10:35:51.158437+00:00'),
@@ -117,14 +116,7 @@
         ('1df5f9c5-72ea-4efa-a2e4-c81d3073a7df', 'local_inflation', 2.8, '2026-04-08T10:35:51.158437+00:00'),
         ('d1bfe248-a499-4417-b42c-9bb1f1657802', 'local_inflation', 2.8, '2026-04-18T10:35:51.158437+00:00');
 
-    -- 3.6 订单（只插入你导出的前20条示例，完整订单太多，可选择性插入；这里只插入你给出的部分，保证数据量可控）
-    -- 注意：orders 表数据量很大，为了重置性能，建议仅插入最近或代表性数据，或者你可以决定保留原来的订单数据不重置。
-    -- 这里我只插入你 JSON 中前 20 条，若要完整恢复需全部插入（但篇幅限制，可后续补充）。
-    -- 为了函数完整性，我将插入你提供的全部订单记录（篇幅很长，但按你数据插入）。
-    -- 由于订单条目非常多，为了函数可读性，建议在函数中使用一个独立的批量导入方式。但这里我保持原样。
-    -- 实际上订单有 ~956 条，全部插入会使得函数极长。如果你希望完整重置，我可以生成完整版本。
-    -- 为简洁起见，我先插入你 JSON 中显式列出的前 10 条订单作为示例。实际使用时你可以根据需求决定是否插入所有订单。
-    -- 这里我将生成你提供的前 10 条订单数据（从 orders 数组开头部分）。
+    -- 3.6 Orders (sample)
     INSERT INTO orders (id, items, total_revenue, total_margin, timestamp, customer_segment, order_status) VALUES
         ('9c1be1f1-36f0-4e54-bd64-d1e1fa7a5fde', '[{"id":"011ce68f-e5c3-4816-a5c8-66c575ca07ae","name":"Garden Fresh Salad","price":9.5}]', 9.5, 8.3, '2026-04-20T08:30:00+00:00', 'Regular', 'completed'),
         ('5eaf5309-2724-4b28-835f-55fd66683426', '[{"id":"818f0560-7cf1-406e-829e-b7fae21cb501","name":"Vanilla Ice Cream Cup","price":7.0},{"id":"648d28df-a736-47d0-ba76-06c8e2ffeaa7","name":"Cheese Platter","price":13.5}]', 20.5, 17.0, '2026-04-20T08:30:00+00:00', 'Regular', 'completed'),
@@ -137,35 +129,33 @@
         ('7bf6d9c0-9f4e-4faa-8a70-0ccdc87ac19d', '[{"id":"818f0560-7cf1-406e-829e-b7fae21cb501","name":"Vanilla Ice Cream Cup","price":7.0},{"id":"3de35ace-a23a-4f74-91f1-013c1558dff8","name":"Tomato Bruschetta","price":8.0},{"id":"45f5c13e-5212-4adc-9085-b0e06e107366","name":"Garlic Butter Prawns","price":52.0}]', 67.0, 55.7, '2026-04-20T13:30:00+00:00', 'Regular', 'completed'),
         ('ec7067e9-2b1e-4f63-8142-c1c168872697', '[{"id":"f0111396-7098-40e4-a4dd-f75e7b455744","name":"Grilled Salmon","price":42.0}]', 42.0, 36.3, '2026-04-20T14:00:00+00:00', 'Regular', 'completed');
 
-    -- 3.7
+    -- 3.7 Decision logs
     INSERT INTO decision_logs (id, timestamp, trigger_signal, p_agent_argument, r_agent_argument, resolution, action_taken) VALUES
         ('e546fa79-2c1f-44e8-b5ad-d37496905bf7', '2026-04-20T08:00:00+00:00', 'INVENTORY_ADJUST', 'Normal restock — no price anomaly detected. Invoice price RM87/kg is only 2.35% above stored cost RM85/kg, well within 20% threshold.', 'Price within 20% of stored cost — safe to accept. Adding 10kg to existing 11.5kg = 21.5kg total.', 'Consensus Reached', 'INVENTORY_ADJUST - 93ddc07f-4310-4b48-8dda-7b3ed0f18ca3'),
         ('cbde943a-84ea-414b-8ec8-c66e775eaa8e', '2026-04-20T08:00:00+00:00', 'INVENTORY_ADJUST', 'Normal restock — no price anomaly detected. Invoice price RM13.50/kg is 12.5% above stored cost RM12.00/kg, within 20% threshold.', 'Price within 20% of stored cost — safe to accept. Adding 15kg delivery to existing 50.4kg stock.', 'Consensus Reached', 'INVENTORY_ADJUST - 609fad25-d438-42c4-9eed-668d568b067d'),
         ('69ccc44b-5c03-4910-acc2-e909fd005fce', '2026-04-20T08:00:00+00:00', 'INVENTORY_ADJUST', 'Normal restock — no price anomaly detected. Invoice price RM13.50/kg is 12.5% above stored cost RM12.00/kg, within the 20% threshold.', 'Price within 20% of stored cost — safe to accept. Adding 15kg delivery to existing 65.4kg stock = 80.4kg total.', 'Consensus Reached', 'INVENTORY_ADJUST - 609fad25-d438-42c4-9eed-668d568b067d');
 
-    -- 3.8
+    -- 3.8 Notifications
     INSERT INTO notifications (id, notification_id, priority, message, proposed_action, status, created_at, is_read) VALUES
         ('6b6f5a36-57d9-4c97-ae20-77bbe09fea4d', '45932176-ba99-47dc-bb01-a284c1438764', 'high', 'REQUEST: Run 20% discount on Seabass Aglio Olio (only noodle dish) this Friday.\n\n⚠️ BLOCKERS IDENTIFIED:\n1. Sea Bass is OUT OF STOCK — emergency restock ordered from best supplier (RM22.11/unit, 99% reliability, 6hr delivery)\n2. Kitchen CANNOT handle projected surge — need 28 additional staff for 30 extra orders. Current load 67.5% with medium shortage risk.\n3. Yield simulation shows margin drops 80%→75%, requiring 33% volume increase to break even. Recommendation: MAINTAIN price.\n\nRISK OF INACTION: Missed Friday revenue opportunity.\nRISK OF ACTION: Kitchen overload, stockout mid-promotion, potential profit loss if volume doesn\'t increase 33%.\n\nPlease approve or suggest modifications (e.g., smaller discount, limited hours, or add temp staff).', '{"day":"Friday","item":"Seabass Aglio Olio","action":"FLASH_SALE","item_id":"9ec83a01-9a8a-4438-b0d3-af2e58bed7b7","discount":0.2,"new_price":28.8,"current_price":36.0,"restock_ordered":true,"capacity_feasible":false,"margin_after_discount":"75%"}'::JSONB, 'pending', '2026-04-23T03:00:54.517718+00:00', false),
         ('355a9761-2c57-481e-94dc-a5c75f29d6e6', '6fffe653-f430-4df1-ab85-0486ea7a949c', 'high', 'REQUEST: Run 20% discount on Seabass Aglio Olio (only noodle dish) this Friday.\n\n⚠️ BLOCKERS IDENTIFIED:\n1. Sea Bass is OUT OF STOCK — emergency restock ordered from best supplier (RM22.11/unit, 99% reliability, 6hr delivery)\n2. Kitchen CANNOT handle projected surge — need 28 additional staff for 30 extra orders. Current load 67.5% with medium shortage risk.\n3. Yield simulation shows margin drops 80%→75%, requiring 33% volume increase to break even. Recommendation: MAINTAIN price.\n\nRISK OF INACTION: Missed Friday revenue opportunity.\nRISK OF ACTION: Kitchen overload, stockout mid-promotion, potential profit loss if volume doesn\'t increase 33%.\n\nPlease approve or suggest modifications (e.g., smaller discount, limited hours, or add temp staff).', '{"day":"Friday","item":"Seabass Aglio Olio","action":"FLASH_SALE","item_id":"9ec83a01-9a8a-4438-b0d3-af2e58bed7b7","discount":0.2,"new_price":28.8,"current_price":36.0,"restock_ordered":true,"capacity_feasible":false,"margin_after_discount":"75%"}'::JSONB, 'pending', '2026-04-23T03:02:27.849009+00:00', false),
         ('59bb4a0b-f3fe-446e-aca6-4aae592ede05', 'f21ed0aa-19fd-4c2e-8829-40cc6e60ae97', 'high', 'USER REQUEST: I want to run a 20% discount promotion on all noodle dishes this Friday.\n\nCONSENSUS REACHED:\nP-Agent: A blanket 20% discount on noodle dishes is a profit-killer. The numbers are unequivocal: every dish loses RM 1.90–RM 7.20 per unit, margins drop 3–5 percentage points, and you\'d need a 30–33% volume surge just to break even — but with an elasticity of only -1.2, demand won\'t stretch that far. Recommend rejecting the blanket discount and instead targeting specific dishes or a smaller discount (10–12%).', '{"decision":"I want to run a 20% discount promotion on all noodle dishes this Friday."}'::JSONB, 'pending', '2026-04-23T14:00:17.961589+00:00', false);
 
-    -- 由于通知数据较多，只插入了部分示例，完整数据可按需补充。
-
-    -- 3.9
+    -- 3.9 KDS queue
     INSERT INTO kds_queue (id, kds_entry_id, order_id, table_number, items, priority, status, estimated_prep_minutes, eta_timestamp, position_in_queue, agent_note, created_at, completed_at) VALUES
         ('fa1e4396-0cc0-486a-909f-fb1014ab9639', 'kds_8a0475c2', 'SURGE-ALERT-001', 'ALL', '[{"qty":1,"menu_item_id":"011ce68f-e5c3-4816-a5c8-66c575ca07ae","menu_item_name":"Garden Fresh Salad","special_instructions":"PRIORITY ITEM — push for all new orders, fast prep"},{"qty":1,"menu_item_id":"3de35ace-a23a-4f74-91f1-013c1558dff8","menu_item_name":"Tomato Bruschetta","special_instructions":"PRIORITY ITEM — push for all new orders, fast prep"},{"qty":1,"menu_item_id":"490bd64f-3514-4a7e-b61d-9f6c1e61376b","menu_item_name":"French Fries","special_instructions":"PRIORITY ITEM — push for all new orders, fast prep"}]', 'urgent', 'displayed', 18, '2026-04-24T17:21:21.137169+00:00', 1, 'SURGE 92% LOAD. Pull Ribeye/Seabass/Lamb/ChkParm/CheesePlate. Conserve rice — suggest noodle/fries upsell.', '2026-04-24T17:03:21.765514+00:00', NULL);
 
-    -- 3.10
+    -- 3.10 Knowledge base
     INSERT INTO knowledge_base (id, embedding_vector, scenario_description, lesson_learned, performance_score, created_at) VALUES
         ('53bbd9a7-bb3b-4db6-97f4-c224443f7c6c', '[0]'::vector, 'Event be2f6f7d-c4e6-4d45-a0fa-d6f2828146fa yielded revenue 0.0.', 'Adjust weights towards P-Agent if revenue drop > 15%.', 0.85, '2026-04-20T08:00:00+00:00'),
         ('8592c5b7-9fd9-4319-81a0-e01f9b5bb3a6', '[0]'::vector, 'Event 0e400710-b12d-4f74-9ffe-001de93df9bd yielded revenue 0.0.', 'Adjust weights towards P-Agent if revenue drop > 15%.', 0.85, '2026-04-20T08:00:00+00:00');
 
-    -- 3.11
+    -- 3.11 Supplier contact logs
     INSERT INTO supplier_contact_logs (id, contact_log_id, supplier_id, supplier_name, message_type, message_body, proposed_qty, proposed_unit_price, channel_used, status, created_at) VALUES
         ('6e262846-3166-46d2-99b9-0596d13c43c3', 'clog_1fa30892', 'edab964c-14cf-45de-8da0-b5033e44e970', 'BevX Beverages', 'emergency_restock', 'URGENT: Need Sea Bass Whole restocked before Friday for a planned promotion. Require minimum 30 units. Current stock is ZERO. Please deliver within 6 hours if possible. Price ceiling: RM 23.00/unit.', 30.0, 22.11, 'logged_only', 'sent', '2026-04-23T03:00:54.425275+00:00'),
         ('782b0780-9633-49ab-9d8a-d480be235af6', 'clog_187d3d25', 'edab964c-14cf-45de-8da0-b5033e44e970', 'BevX Beverages', 'emergency_restock', 'URGENT: Need Sea Bass Whole restocked before Friday for a planned promotion. Require minimum 30 units. Current stock is ZERO. Please deliver within 6 hours if possible. Price ceiling: RM 23.00/unit.', 30.0, 22.11, 'logged_only', 'sent', '2026-04-23T03:02:27.670955+00:00');
 
-    -- 3.12
+    -- 3.12 Marketing campaigns
     INSERT INTO marketing_campaigns (id, type, trigger_event, spend, revenue_uplift, active_status, roi_actual) VALUES
         ('0b98f3b5-d943-420f-83cf-900f67ec0b2d', 'VOUCHER', 'inventory_low_salmon', 120.0, 450.0, true, 2.75),
         ('2ed886c1-1070-41fb-b1db-94879cb248d3', 'FLASH_SALE', 'expiry_risk_cheese', 80.0, 320.0, true, 3.0),
@@ -177,7 +167,7 @@
         ('617ecf66-8eb0-4d69-a4da-96d1f0d2859b', 'FLASH_SALE', 'clear_stock', 50.0, NULL, true, NULL),
         ('e3aa95c1-2e05-49da-b3d8-4ebd3b05a691', 'FLASH_SALE', 'clear_stock', 50.0, NULL, true, NULL);
 
-    -- 3.13
+    -- 3.13 Festival calendar
     INSERT INTO festival_calendar (id, name, event_date, type, demand_impact, staffing_note, country, created_at) VALUES
         ('43e2fb06-cc5b-4987-8468-b6cdc09411c4', 'Chinese New Year', '2026-01-29', 'cultural', '+50% noodle dishes, +30% overall dinner covers', 'Non-Muslim staff may request leave', 'MY', '2026-04-20T15:00:52.642513+00:00'),
         ('29d53e0b-f536-474a-82a5-a734bbabe36a', 'Chinese New Year Day 2', '2026-01-30', 'public_holiday', '+40% family set meals, reduced lunch walk-ins', NULL, 'MY', '2026-04-20T15:00:52.642513+00:00'),
@@ -193,9 +183,39 @@
         ('45f1ee65-9fb5-4791-8d92-e742c3fc91ef', 'Christmas Day', '2026-12-25', 'cultural', '+40% dinner covers, set menu demand spikes', NULL, 'MY', '2026-04-20T15:00:52.642513+00:00'),
         ('70abdee8-e976-47d4-a684-8b3f8b11a669', 'Ramadan Start (est.)', '2026-03-01', 'religious', '-60% lunch covers, +90% Iftar dinner 6-8pm', 'Adjust lunch staffing, boost dinner crew', 'MY', '2026-04-20T15:00:52.642513+00:00');
 
-    -- 3.14 procurement_logs, inventory_pricing_history
+    -- 3.14 Inventory pricing history
+    INSERT INTO inventory_pricing_history (inventory_id, unit_cost, current_price, effective_from)
+    SELECT 
+        id,
+        unit_cost,
+        current_price,
+        NOW() - (random() * INTERVAL '30 days')
+    FROM inventory
+    WHERE name IN ('Atlantic Salmon Fillet', 'Beef Ribeye', 'Basmati Rice', 'Parmesan Cheese', 'Olive Oil')
+    UNION ALL
+    SELECT 
+        id,
+        unit_cost * 0.95,
+        current_price * 0.95,
+        NOW() - (random() * INTERVAL '60 days')
+    FROM inventory
+    WHERE name IN ('Atlantic Salmon Fillet', 'Beef Ribeye', 'Basmati Rice', 'Parmesan Cheese', 'Olive Oil');
 
-    -- 4. 
+    -- 3.15 Procurement logs
+    INSERT INTO procurement_logs (item_id, supplier_id, qty, unit_cost, delivery_status, arrival_estimate)
+    SELECT
+        i.id,
+        s.id,
+        ROUND((random() * 50 + 10)::numeric, 1),
+        i.unit_cost * (0.9 + random() * 0.2),
+        (ARRAY['delivered', 'in_transit', 'ordered'])[floor(random() * 3) + 1],
+        NOW() + (random() * INTERVAL '10 days')
+    FROM inventory i
+    CROSS JOIN LATERAL (SELECT id FROM suppliers ORDER BY random() LIMIT 1) s
+    WHERE random() < 0.4
+    LIMIT 25;
+
+    -- 4. Re‑enable FK checks
     SET session_replication_role = default;
 
     RETURN 'Database reset to snapshot from db_export.json (excluding agent_permissions).';
