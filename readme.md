@@ -1,12 +1,24 @@
-Pitching Video: 
+# 🚀 AutoYield — AI-Powered Autonomous Restaurant Operations System
 
-Guidelines
+AutoYield is an AI-driven autonomous restaurant management system designed to optimize inventory, pricing, forecasting, procurement, and proactive operations through multi-agent reasoning and real-time decision support.
 
+Built for **UMHackathon 2026**.
+
+---
+
+## 📌 Project Deliverables
+
+All competition deliverables are located in the `/documentation` folder:
+
+```bash
 /documentation
-- Product Requirement Document
-- System Analysis Document
-- Quality Assurance Testing Document 
-- Pitch Deck
-- Pitching Video Link (YouTube Link)
+│── Product Requirement Document (PRD)
+│── System Analysis Document (SAD)
+│── Quality Assurance Testing Document (QATD)
+│── Pitch Deck
+└── Pitching Video (Link)
+```
 
-/backend
+---
+
+Pitching video link

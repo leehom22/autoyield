@@ -57,7 +57,7 @@ class NotificationApproval(BaseModel):
 async def lifespan(app: FastAPI):
     # Startup: Start the World Simulation Engine
     engine_task = asyncio.create_task(world_engine.run_loop())
-    print("✅ AutoYield Kernel started. World simulation engine is running.")
+    print("AutoYield Kernel started. World simulation engine is running.")
     
     # Initialize the Agent Graph, Scheduler and Proactive Monitoring globally once
     app.state.graph = get_graph()
@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
     try:
         await asyncio.wait_for(engine_task, timeout=5.0)
     except (asyncio.CancelledError, asyncio.TimeoutError):
-        print("🛑 World simulation engine shut down.")
+        print(" World simulation engine shut down.")
 
 # ─────────────────────────────────────────────
 # App Initialization
@@ -135,7 +135,6 @@ async def approve_notification(req: NotificationApproval):
 # ─────────────────────────────────────────────
 # Include Routers from existing modules
 # ─────────────────────────────────────────────
-# ! Delete after testing - Temporary endpoint for crisis scenario testing
 from app.api import crisis_test, schedule_test
 app.include_router(crisis_test.router,prefix="/api/crisis_test", tags=["Crisis Test"])
 app.include_router(schedule_test.router, prefix="/api/forecast-test", tags=["Forecast Test"])

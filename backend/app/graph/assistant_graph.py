@@ -798,7 +798,7 @@ def executor_node(state: AgentState) -> AgentState:
             return {
                 **state,
                 "final_response":
-                    "✅ Human approval request already submitted to admin dashboard.",
+                    "Human approval request already submitted to admin dashboard.",
                 "node_tool_call_count": 0,
             }
 
