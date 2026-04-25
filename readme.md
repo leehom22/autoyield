@@ -21,4 +21,4 @@ All competition deliverables are located in the `/documentation` folder:
 
 ---
 
-Pitching video link
+Pitching video link: https://youtu.be/4qrSODTTC58
