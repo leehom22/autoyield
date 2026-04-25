@@ -49,13 +49,33 @@ async def adjust_velocity(payload: GodModeVelocityPayload):
 
 
 # God Mode Crisis Trigger
+@router.post("/trigger-crisis")
+async def trigger_crisis_endpoint(payload: GodModePayload):
+    return await trigger_crisis(payload)
+
 async def trigger_crisis(payload: GodModePayload):
+    # New fields
+    qty_mult = payload.inventory_qty_multiplier if payload.inventory_qty_multiplier != 1.0 else payload.inventory_multiplier
+    cost_mult = payload.inventory_cost_multiplier if payload.inventory_cost_multiplier != 1.0 else payload.inventory_multiplier
+
     # 1. Inventory Adjustment
-    if payload.inventory_multiplier != 1.0:
+    if qty_mult != 1.0 or cost_mult != 1.0:
         if payload.inventory_target_id:
-            supabase.table("inventory").update({"qty": supabase.raw(f"qty * {payload.inventory_multiplier}")}).eq("id", payload.inventory_target_id).execute()
+            update_data = {}
+            if qty_mult != 1.0:
+                update_data["qty"] = supabase.raw(f"qty * {qty_mult}")
+            if cost_mult != 1.0:
+                update_data["unit_cost"] = supabase.raw(f"unit_cost * {cost_mult}")
+            if update_data:
+                supabase.table("inventory").update(update_data).eq("id", payload.inventory_target_id).execute()
         else:
-            supabase.table("inventory").update({"qty": supabase.raw(f"qty * {payload.inventory_multiplier}")}).execute()
+            update_data = {}
+            if qty_mult != 1.0:
+                update_data["qty"] = supabase.raw(f"qty * {qty_mult}")
+            if cost_mult != 1.0:
+                update_data["unit_cost"] = supabase.raw(f"unit_cost * {cost_mult}")
+            if update_data:
+                supabase.table("inventory").update(update_data).execute()
 
     # 2. Oil Price Adjustment
     if payload.oil_price_multiplier != 1.0:

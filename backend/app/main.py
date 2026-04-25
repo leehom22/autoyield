@@ -109,6 +109,13 @@ async def get_notifications(unread_only: bool = True):
 async def approve_notification(req: NotificationApproval):
     # db = supabase()
     # db.table("notifications").update({"is_read": True}).eq("notification_id", req.notification_id).execute()
+    result = supabase.table("notifications").select("*").eq("notification_id", req.notification_id).execute()
+    if not result.data:
+        # Fallback, query with id（UUID）
+        result = supabase.table("notifications").select("*").eq("id", req.notification_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
     new_status = "approved" if req.approved else "rejected"
     supabase.table("notifications").update({
         "is_read": True,

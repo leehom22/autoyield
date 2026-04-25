@@ -33,33 +33,46 @@ export default function ProcurementLogs() {
 
     const channel = supabase
       .channel('procurement-realtime')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'procurement_logs' },
-        async (payload) => {
-          const newRow = payload.new as any;
-          // Try to get ingredient & supplier names
-          let ingredientName = newRow.ingredient_name || '—';
-          let supplierName = newRow.supplier_name || '—';
-          if (newRow.inventory_id) {
-            const { data: inv } = await supabase.from('inventory').select('name').eq('id', newRow.inventory_id).single();
-            if (inv) ingredientName = inv.name;
-          }
-          if (newRow.supplier_id) {
-            const { data: sup } = await supabase.from('suppliers').select('name').eq('id', newRow.supplier_id).single();
-            if (sup) supplierName = sup.name;
-          }
-          setLogs((prev) => [{
-            ...newRow,
-            ingredient_name: ingredientName,
-            supplier_name: supplierName,
-          }, ...prev]);
-        }
-      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'procurement_logs' }, () => {
+        fetchLogs();
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // useEffect(() => {
+  //   fetchLogs();
+
+  //   const channel = supabase
+  //     .channel('procurement-realtime')
+  //     .on(
+  //       'postgres_changes',
+  //       { event: 'INSERT', schema: 'public', table: 'procurement_logs' },
+  //       async (payload) => {
+  //         const newRow = payload.new as any;
+  //         // Try to get ingredient & supplier names
+  //         let ingredientName = newRow.ingredient_name || '—';
+  //         let supplierName = newRow.supplier_name || '—';
+  //         if (newRow.inventory_id) {
+  //           const { data: inv } = await supabase.from('inventory').select('name').eq('id', newRow.inventory_id).single();
+  //           if (inv) ingredientName = inv.name;
+  //         }
+  //         if (newRow.supplier_id) {
+  //           const { data: sup } = await supabase.from('suppliers').select('name').eq('id', newRow.supplier_id).single();
+  //           if (sup) supplierName = sup.name;
+  //         }
+  //         setLogs((prev) => [{
+  //           ...newRow,
+  //           ingredient_name: ingredientName,
+  //           supplier_name: supplierName,
+  //         }, ...prev]);
+  //       }
+  //     )
+  //     .subscribe();
+
+  //   return () => { supabase.removeChannel(channel); };
+  // }, []);
 
   const fetchLogs = async () => {
     setLoading(true);

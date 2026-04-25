@@ -22,7 +22,14 @@ export default function GodModeConsole() {
 
   useEffect(() => {
     supabase.from('inventory').select('*').then(({ data }) => { if (data?.length) setItems(data); });
-    supabase.from('market_trends_current').select('exchange_rate_usd_myr').limit(1).then(({ data }) => { if (data?.[0]) setExchangeRate(data[0].exchange_rate_usd_myr); });
+    supabase.from('market_trends_history')
+    .select('value')
+    .eq('indicator', 'usd_myr')
+    .order('recorded_at', { ascending: false })
+    .limit(1)
+    .then(({ data }) => {
+      if (data?.[0]) setExchangeRate(data[0].value);
+    });
   }, []);
 
   const fire = async (label: string, fn: () => Promise<any>) => {

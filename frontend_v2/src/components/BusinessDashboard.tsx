@@ -59,8 +59,7 @@ export default function BusinessDashboard() {
           <div className="stat-card"><span className="sc-label">Low Stock / Expiring</span><span className="sc-value"><span className="text-orange">{lowStockCount}</span> <span className="text-2" style={{ fontSize: 12 }}>/</span> <span className="text-red">{expiringCount}</span></span></div>
           <div className="stat-card"><span className="sc-label">Avg Menu Margin</span><span className="sc-value text-green">{avgMargin}%</span></div>
           <div className="stat-card"><span className="sc-label">Avg Staff Load</span><span className="sc-value" style={{ color: avgLoad > 80 ? 'var(--orange)' : 'var(--green)' }}>{avgLoad}%</span></div>
-        </div>
-
+        </div>       
         {/* Tabs */}
         <div className="row" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', flexShrink: 0, padding: '0 6px' }}>
           {tabs.map((t) => (
@@ -89,7 +88,7 @@ export default function BusinessDashboard() {
           </tbody></table>}
 
           {tab === 'supp' && <table className="data-table"><thead><tr><th>Name</th><th className="text-right">Reliability</th><th className="text-right">Lead Time</th><th>Pricing Tiers</th><th>Actions</th></tr></thead><tbody>
-            {supp.map((s) => <tr key={s.id}><td>{s.name}</td><td className="text-right"><span className={`mono ${s.reliability_score >= 80 ? 'text-green' : s.reliability_score >= 50 ? 'text-orange' : 'text-red'}`}>{s.reliability_score}</span></td><td className="text-right mono">{s.avg_lead_time}h</td><td className="text-2 truncate" style={{ maxWidth: 180, fontSize: 10 }}>{typeof s.pricing_tiers === 'object' ? JSON.stringify(s.pricing_tiers) : s.pricing_tiers}</td>
+            {supp.map((s) => <tr key={s.id}><td>{s.name}</td><td className="text-right"><span className={`mono ${s.reliability_score >= 0.8 ? 'text-green' : s.reliability_score >= 0.5 ? 'text-orange' : 'text-red'}`}>{Math.round(s.reliability_score * 100)}%</span></td><td className="text-right mono">{s.avg_lead_time}h</td><td className="text-2 truncate" style={{ maxWidth: 180, fontSize: 10 }}>{typeof s.pricing_tiers === 'object' ? JSON.stringify(s.pricing_tiers) : s.pricing_tiers}</td>
               <td>
                 <button
                   className="btn btn-ghost btn-sm"
@@ -103,7 +102,7 @@ export default function BusinessDashboard() {
           </tbody></table>}
 
           {tab === 'staff' && <table className="data-table"><thead><tr><th>Name</th><th>Role</th><th>Shift</th><th className="text-right">Load</th><th className="text-right">Capacity</th></tr></thead><tbody>
-            {staff.map((s) => <tr key={s.id}><td>{s.name}</td><td><span className="badge badge-purple">{s.role}</span></td><td className="mono text-2" style={{ fontSize: 10 }}>{s.shift_start} – {s.shift_end}</td><td className="text-right"><span className={`mono ${(s.current_load ?? 0) > 80 ? 'text-orange' : 'text-green'}`}>{s.current_load}%</span></td><td className="text-right mono text-2">{s.max_capacity_score}</td></tr>)}
+            {staff.map((s) => <tr key={s.id}><td>{s.name}</td><td><span className="badge badge-purple">{s.role}</span></td><td className="mono text-2" style={{ fontSize: 10 }}>{new Date(s.shift_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(s.shift_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td><td className="text-right"><span className={`mono ${(s.current_load ?? 0) > 80 ? 'text-orange' : 'text-green'}`}>{s.current_load}%</span></td><td className="text-right mono text-2">{s.max_capacity_score}</td></tr>)}
           </tbody></table>}
         </div>
       </div>

@@ -5,6 +5,7 @@ from app.core.state import SYSTEM_STATE
 from app.engine.simulator import get_current_simulated_time
 from langchain_core.messages import HumanMessage
 from app.core.config import settings
+from app.engine.simulator import world_engine
 
 # Avoid agent from being triggered when handling crisis
 _last_trigger_real_time = {}
