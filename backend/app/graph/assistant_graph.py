@@ -13,12 +13,15 @@ from app.tools.mcp_tools_call import get_all_lc_tools
 from app.graph.toolsCategory import PLANNING_TOOLS, EXECUTION_TOOLS, LEARNING_TOOLS
 load_dotenv()
 
+from app.core.supabase import supabase
+from app.engine.simulator import get_current_simulated_time
+
 # ─────────────────────────────────────────────
 # Constants — tune these without touching graph logic
 # ─────────────────────────────────────────────
 MAX_DEBATE_ROUNDS      = 3    # R-Agent forced to concede after this many rounds
 MAX_SUPERVISOR_RETRIES = 2    # Supervisor loops before falling back to executor
-MAX_TOOL_CALLS_PER_NODE = 6   # Hard cap on tool-call loops per node visit
+MAX_TOOL_CALLS_PER_NODE = 3   # Hard cap on tool-call loops per node visit
 HIGH_STAKES_SPEND_RM   = 500  # Notify human if spend exceeds this
 HIGH_STAKES_PRICE_PCT  = 0.15 # Notify human if price change exceeds this
 
@@ -27,9 +30,9 @@ HIGH_STAKES_PRICE_PCT  = 0.15 # Notify human if price change exceeds this
 # ─────────────────────────────────────────────
 def get_glm() -> ChatOpenAI:
     return ChatOpenAI(
-        model=os.getenv("GLM_MODEL", "glm-4-plus"),
+        model=os.getenv("GLM_MODEL", "ilmu-glm-5.1"),
         api_key=os.getenv("GLM_API_KEY"),
-        base_url=os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/"),
+        base_url=os.getenv("GLM_BASE_URL", "https://api.ilmu.ai/v1"),
         temperature=0.3,
     )
 
@@ -44,6 +47,14 @@ class AgentState(TypedDict):
     supervisor_summary:     str
     human_approval_sent:    bool
 
+    # from upload_invoice trigger
+    trigger_signal: str
+    invoice_data: dict
+    should_persist_decision: bool
+    decision_saved: bool
+    # ---------------------------
+    
+    debate_started: bool
     p_agent_position:       str
     r_agent_position:       str
     debate_rounds:          int
@@ -147,6 +158,7 @@ DOMAIN: pricing|procurement|ops|clarification
 INTENT: debate|direct
 
 DEBATE triggers:
+- Price changes (eg: Price increase, Price spike)
 - Advice requested ("should we?", "what do you think?")
 - Promotions, discounts, campaigns
 - Supplier changes or bulk purchases
@@ -175,11 +187,11 @@ CRITICAL RULES
 P_AGENT_PROMPT = """\
 You are the P-Agent (Profit Maximization Agent).
 
-Your ONLY job: argue for the most profitable action the business can take RIGHT NOW.
+Your ONLY job: argue for the most profitable action the business can take RIGHT NOW, including pricing, supplier, procurement, or purchasing decisions.
 
 TOOL RULES:
 - You may call simulate_yield_scenario ONLY if a key pricing number is missing.
-- After receiving ONE relevant simulation result, you MUST finalize your recommendation.
+- For procurement cases, do not call pricing tools. Use the supervisor summary and tool results only.- After receiving ONE relevant simulation result, you MUST finalize your recommendation.
 - Do NOT call simulate_yield_scenario repeatedly for the same item/action.
 - Do NOT test multiple discount values unless the user explicitly asked for comparison.
 - If the supervisor summary already contains sufficient pricing numbers, DO NOT call any tool.
@@ -254,11 +266,11 @@ FORMAT:
 # Safety helpers
 # ─────────────────────────────────────────────
 _DEBATE_KEYWORDS = {
-    "price change", "promotion", "supplier switch", "flash sale",
+    "price change", "price spike", "price increase","promotion", "supplier switch", "flash sale",
     "menu restructure", "bulk purchase", "discount", "voucher",
     "ad boost", "campaign", "increase price", "reduce price",
     "should we", "what do you think", "how can we", "recommend",
-    "advise", "strategy",
+    "advise", "strategy"
 }
 
 
@@ -267,6 +279,11 @@ def _keyword_needs_debate(text: str) -> bool:
     lower = text.lower()
     return any(kw in lower for kw in _DEBATE_KEYWORDS)
 
+def _classify_trigger_signal(trigger: str):
+    if trigger == "INVOICE_PRICE_SPIKE":
+        return "debate", "procurement"
+
+    return "unknown", "unknown"
 
 def _parse_intent(content: str) -> Literal["debate", "direct", "unknown"]:
     """Reads the INTENT: line from supervisor output. Falls back to keyword check."""
@@ -401,6 +418,73 @@ def _safe_llm_call(llm, messages: list, node_name: str) -> AIMessage:
 
 
 # ─────────────────────────────────────────────
+# Debug printing helpers
+# ─────────────────────────────────────────────
+DEBUG_GRAPH = os.getenv("DEBUG_GRAPH", "true").lower() == "true"
+
+RESET  = "\033[0m"
+BOLD   = "\033[1m"
+CYAN   = "\033[96m"
+GREEN  = "\033[92m"
+YELLOW = "\033[93m"
+RED    = "\033[91m"
+GRAY   = "\033[90m"
+BLUE   = "\033[94m"
+
+def subheader(text: str):
+    if DEBUG_GRAPH:
+        print(f"\n{BOLD}{BLUE}  ▶ {text}{RESET}")
+
+def ok(text: str):
+    if DEBUG_GRAPH:
+        print(f"  {GREEN}✓ {text}{RESET}")
+
+def warn(text: str):
+    if DEBUG_GRAPH:
+        print(f"  {YELLOW}⚠ {text}{RESET}")
+
+def fail(text: str):
+    if DEBUG_GRAPH:
+        print(f"  {RED}✗ {text}{RESET}")
+
+def dim(text: str):
+    if DEBUG_GRAPH:
+        print(f"  {GRAY}{text}{RESET}")
+
+
+def debug_state(node: str, state: dict):
+    if not DEBUG_GRAPH:
+        return
+
+    subheader(f"Node: {node}")
+
+    fields = {
+        "user_query": state.get("user_query"),
+        "trigger_signal": state.get("trigger_signal"),
+        "decision_type": state.get("decision_type"),
+        "decision_domain": state.get("decision_domain"),
+        "pending_handler": state.get("pending_handler"),
+        "debate_rounds": state.get("debate_rounds"),
+        "consensus_reached": state.get("consensus_reached"),
+        "human_approval_sent": state.get("human_approval_sent"),
+        "should_persist_decision": state.get("should_persist_decision"),
+        "decision_saved": state.get("decision_saved"),
+        "node_tool_call_count": state.get("node_tool_call_count"),
+    }
+
+    dim(f"State: {fields}")
+
+    if state.get("messages"):
+        last = state["messages"][-1]
+        tool_calls = getattr(last, "tool_calls", None)
+
+        if tool_calls:
+            for tc in tool_calls:
+                dim(f"Tool call → {tc.get('name')}({str(tc.get('args', {}))[:120]})")
+        else:
+            content = str(getattr(last, "content", ""))[:250]
+            dim(f"Last message: {type(last).__name__}: {content}")
+# ─────────────────────────────────────────────
 # Nodes
 # ─────────────────────────────────────────────
 
@@ -420,12 +504,29 @@ def supervisor_node(state: AgentState) -> AgentState:
         "supervisor"
     )
 
-    intent: Literal["debate", "direct", "unknown"] = state.get("decision_type", "unknown")
-    domain: Literal["pricing", "procurement", "ops", "clarification", "unknown"] = state.get("decision_domain", "unknown")
+    trigger_intent, trigger_domain = _classify_trigger_signal(
+        state.get("trigger_signal", "")
+    )
+
+    intent: Literal["debate", "direct", "unknown"] = (
+        trigger_intent if trigger_intent != "unknown"
+        else state.get("decision_type", "unknown")
+    )
+
+    domain: Literal["pricing", "procurement", "ops", "clarification", "unknown"] = (
+        trigger_domain if trigger_domain != "unknown"
+        else state.get("decision_domain", "unknown")
+    )
 
     if not getattr(response, "tool_calls", None):
-        intent = _parse_intent(response.content)
-        domain = _parse_domain(response.content)
+        parsed_intent = _parse_intent(response.content)
+        parsed_domain = _parse_domain(response.content)
+
+        if intent == "unknown":
+            intent = parsed_intent
+
+        if domain == "unknown":
+            domain = parsed_domain
 
         if intent == "unknown":
             intent = "debate" if _keyword_needs_debate(user_query) else "direct"
@@ -437,8 +538,8 @@ def supervisor_node(state: AgentState) -> AgentState:
         domain = "clarification"
     
     retries = state.get("supervisor_retries", 0)
-
-    return {
+    
+    new_state = {
         **state,
         "messages": [response],
         "user_query": user_query,
@@ -451,17 +552,14 @@ def supervisor_node(state: AgentState) -> AgentState:
         "supervisor_retries": retries + 1,
         "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if getattr(response, "tool_calls", None) else 0),
     }
+    debug_state("supervisor:end", new_state)
+    
+    return new_state
 
 
 def p_agent_node(state: AgentState) -> AgentState:
-    if state.get("decision_domain") == "procurement":
-        return {
-            **state,
-            "error_state": "Procurement case incorrectly routed to pricing P-Agent",
-            "final_response": "Routing error: procurement request should not be handled by P-Agent.",
-            "node_tool_call_count": 0,
-        }
-
+    # Procurement can still be debated.
+    # P-Agent should argue for the most profitable procurement action.
     tool_msgs = [
         m for m in state["messages"]
         if isinstance(m, ToolMessage) and getattr(m, "name", "") == "simulate_yield_scenario"
@@ -504,14 +602,19 @@ def p_agent_node(state: AgentState) -> AgentState:
             "node_tool_call_count": state.get("node_tool_call_count", 0) + 1,
         }
 
-    return {
+    new_state = {
         **state,
         "messages": [response],
+        "debate_started": True,
         "p_agent_position": response.content,
         "debate_rounds": state["debate_rounds"] + 1,
         "pending_handler": "none",
         "node_tool_call_count": 0,
     }
+    
+    debug_state("p_agent_node:end", new_state)
+    
+    return new_state
 
 
 def r_agent_node(state: AgentState) -> AgentState:
@@ -559,13 +662,15 @@ def r_agent_node(state: AgentState) -> AgentState:
         if "SYSTEM ERROR" in position:
             consensus = True
 
-        return {
+        new_state = {
             **state,
             "r_agent_position":  position,
             "messages":          [AIMessage(content=f"[R-Agent]: {position}")],
             "consensus_reached": consensus,
             "node_tool_call_count": 0,
         }
+        debug_state("r_agent_node:end", new_state)
+        return new_state
 
 def procurement_agent_node(state: AgentState) -> AgentState:
     tools = [
@@ -595,13 +700,16 @@ def procurement_agent_node(state: AgentState) -> AgentState:
             "node_tool_call_count": 1,
         }
 
-    return {
+    new_state = {
         **state,
         "messages": [response],
         "final_response": response.content,
         "pending_handler": "none",
         "node_tool_call_count": 0,
-    }
+     }
+    debug_state("procurement_agent_node:end", new_state)
+    
+    return new_state
     
 def executor_node(state: AgentState) -> AgentState:
     """
@@ -667,13 +775,15 @@ def executor_node(state: AgentState) -> AgentState:
             "executor_high_stakes"
         )
 
-        return {
+        new_state = {
             **state,
             "messages": [response],
             "pending_handler": "executor",
             "human_approval_sent": True,   # IMPORTANT
             "node_tool_call_count": 1,
         }
+        debug_state("executor_node:end", new_state)
+        return new_state
 
     response = _safe_llm_call(
         llm,
@@ -689,7 +799,64 @@ def executor_node(state: AgentState) -> AgentState:
         "node_tool_call_count": 1 if getattr(response, "tool_calls", None) else 0,
     }
 
+def save_decision_node(state: AgentState) -> AgentState:
+    debug_state("save_decision:start", state)
 
+    # Only P/R debate can save decision.
+    if not state.get("debate_started", False):
+        warn("save skipped: debate_started=False")
+        return {
+            **state,
+            "decision_saved": False,
+        }
+
+    if state.get("decision_saved", False):
+        warn("save skipped: already saved")
+        return state
+
+    action_taken = state.get("final_response", "")
+
+    if not action_taken:
+        if state.get("human_approval_sent", False):
+            action_taken = "Human approval notification sent. Execution paused pending approval."
+        else:
+            action_taken = state.get("r_agent_position", "") or state.get("p_agent_position", "")
+
+    payload = {
+        "trigger_signal": state.get("trigger_signal", "UNKNOWN"),
+        "timestamp": get_current_simulated_time().isoformat(),
+        "p_agent_argument": state.get("p_agent_position", ""),
+        "r_agent_argument": state.get("r_agent_position", ""),
+        "resolution": (
+            "Human approval required"
+            if state.get("human_approval_sent", False)
+            else "P/R debate completed"
+        ),
+        "action_taken": action_taken[:500],
+    }
+
+    ok("Saving P/R debate decision_logs record")
+    dim(str(payload))
+
+    try:
+        supabase.table("decision_logs").insert(payload).execute()
+    except Exception as e:
+        fail(f"Failed to save decision log: {type(e).__name__}: {str(e)[:200]}")
+        return {
+            **state,
+            "decision_saved": False,
+            "error_state": f"save_decision failed: {str(e)[:200]}",
+        }
+
+    new_state = {
+        **state,
+        "decision_saved": True,
+        "final_response": action_taken,
+    }
+
+    debug_state("save_decision:end", new_state)
+    return new_state
+    
 # ─────────────────────────────────────────────
 # Routing — reads state only, never parses LLM output
 # ─────────────────────────────────────────────
@@ -698,32 +865,47 @@ def route_after_supervisor(state: AgentState) -> str:
     last = state["messages"][-1]
     has_tool_calls = bool(getattr(last, "tool_calls", None))
 
+    domain = state.get("decision_domain", "unknown")
+    intent = state.get("decision_type", "unknown")
+
+    # If supervisor already knows this is a debate case,
+    # do not let extra tool calls trap the graph forever.
+    if intent == "debate" and not has_tool_calls:
+        return "p_agent"
+
     if has_tool_calls:
         if state.get("node_tool_call_count", 0) >= MAX_TOOL_CALLS_PER_NODE:
+            # Tool cap reached. Continue with current classification.
+            if intent == "debate":
+                return "p_agent"
+            if domain == "procurement":
+                return "procurement_agent"
+            if intent == "direct":
+                return "executor"
             return "supervisor"
-        return "tool_node"
 
-    domain = state.get("decision_domain", "unknown")
+        return "tool_node"
 
     if domain == "clarification":
         return END
 
+    # IMPORTANT:
+    # Debate must be checked BEFORE procurement.
+    # Otherwise procurement debate is swallowed by procurement_agent.
+    if intent == "debate":
+        return "p_agent"
+
     if domain == "procurement":
         return "procurement_agent"
 
-    if state.get("decision_type") == "debate":
-        return "p_agent"
-
-    if state.get("decision_type") == "direct":
+    if intent == "direct":
         return "executor"
 
     if state.get("supervisor_retries", 0) < MAX_SUPERVISOR_RETRIES:
         return "supervisor"
 
-    # Fallback: unknown + retries exhausted → treat as direct
     print(f"⚠ Supervisor could not classify intent after {MAX_SUPERVISOR_RETRIES} retries — defaulting to direct")
     return "executor"
-
 
 def route_after_p_agent(state: AgentState) -> str:
     last = state["messages"][-1]
@@ -741,34 +923,58 @@ def route_after_r_agent(state: AgentState) -> str:
         return "executor"
     return "p_agent"
 
-
 def route_after_executor(state: AgentState) -> str:
+    debug_state("route_after_executor", state)
+
     last = state["messages"][-1]
+
+    # If executor calls a tool, go execute the tool first.
     if getattr(last, "tool_calls", None):
         if state.get("node_tool_call_count", 0) >= MAX_TOOL_CALLS_PER_NODE:
-            print("⚠ Executor tool call cap hit — terminating")
-            return END
-        return "tool_node"
-    return END
+            if state.get("debate_started", False):
+                warn("executor → save_decision | debate flow tool cap hit")
+                return "save_decision"
 
+            warn("executor → END | non-debate tool cap hit")
+            return END
+
+        ok("executor → tool_node | tool call detected")
+        return "tool_node"
+
+    # ONLY P/R debate flow can save decision.
+    if state.get("debate_started", False):
+        ok("executor → save_decision | P/R debate completed")
+        return "save_decision"
+
+    dim("executor → END | non-debate flow")
+    return END
 
 def route_after_tools(state: AgentState) -> str:
     handler = state.get("pending_handler", "supervisor")
 
+    # If a human approval notification was sent after P/R debate,
+    # the final node must still be save_decision.
     if state.get("human_approval_sent", False):
+        if state.get("debate_started", False):
+            ok("tool_node → save_decision | human approval sent after P/R debate")
+            return "save_decision"
+
+        ok("tool_node → END | human approval sent in non-debate flow")
         return END
 
     if handler == "executor":
         return "executor"
+
     if handler == "r_agent":
         return "r_agent"
+
     if handler == "p_agent":
         return "p_agent"
+
     if handler == "procurement_agent":
         return "procurement_agent"
 
     return "supervisor"
-
 
 # ─────────────────────────────────────────────
 # Build graph
@@ -783,6 +989,7 @@ def build_assistant_graph():
     builder.add_node("executor",   executor_node)
     builder.add_node("tool_node",  ToolNode(get_all_lc_tools()))
     builder.add_node("procurement_agent", procurement_agent_node)
+    builder.add_node("save_decision", save_decision_node)
     
     builder.add_edge(START, "supervisor")
 
@@ -807,7 +1014,8 @@ def build_assistant_graph():
 
     builder.add_conditional_edges("executor", route_after_executor, {
         "tool_node": "tool_node",
-        END:         END,
+        "save_decision": "save_decision",
+        END: END,
     })
 
     builder.add_conditional_edges("tool_node", route_after_tools, {
@@ -816,8 +1024,11 @@ def build_assistant_graph():
         "p_agent": "p_agent",
         "r_agent": "r_agent",
         "procurement_agent": "procurement_agent",
+        "save_decision": "save_decision",
         END: END,
     })
+    
+    builder.add_edge("save_decision", END)
 
     return builder.compile()
 

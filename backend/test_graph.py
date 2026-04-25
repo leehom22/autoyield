@@ -128,16 +128,16 @@ async def test_assistant_graph():
 
     # ── Test 1: Direct path — read-only query, should NOT trigger debate
     # ** Test with success
-    # state = await stream_graph(
-    #     graph,
-    #     make_state("What is the current inventory level for salmon?"),
-    #     "Direct path — inventory check (no debate expected)"
-    # )
-    # decision_type = state.get("decision_type", "unknown")
-    # if decision_type == "direct":
-    #     ok(f"Routed as 'direct' — correct")
-    # else:
-    #     warn(f"Expected 'direct', got '{decision_type}'")
+    state = await stream_graph(
+        graph,
+        make_state("What is the current inventory level for salmon?"),
+        "Direct path — inventory check (no debate expected)"
+    )
+    decision_type = state.get("decision_type", "unknown")
+    if decision_type == "direct":
+        ok(f"Routed as 'direct' — correct")
+    else:
+        warn(f"Expected 'direct', got '{decision_type}'")
 
     # ── Test 2: Debate path — promotion keyword must trigger P vs R
     # ** Test with success
@@ -179,16 +179,16 @@ async def test_assistant_graph():
 
     # ── Test 5: Forced consensus — debate must terminate within 3 rounds
     # ** Test with success
-    state = await stream_graph(
-        graph,
-        make_state("Launch a flash sale with 30% off all menu items immediately."),
-        "Forced consensus — debate must end within 3 rounds"
-    )
-    rounds = state.get("debate_rounds", 0)
-    if rounds <= 3:
-        ok(f"Debate terminated within limit (rounds: {rounds})")
-    else:
-        fail(f"Debate exceeded 3 rounds: {rounds} — forced concede may not be working")
+    # state = await stream_graph(
+    #     graph,
+    #     make_state("Launch a flash sale with 30% off all menu items immediately."),
+    #     "Forced consensus — debate must end within 3 rounds"
+    # )
+    # rounds = state.get("debate_rounds", 0)
+    # if rounds <= 3:
+    #     ok(f"Debate terminated within limit (rounds: {rounds})")
+    # else:
+    #     fail(f"Debate exceeded 3 rounds: {rounds} — forced concede may not be working")
 
 
 # ─────────────────────────────────────────────
