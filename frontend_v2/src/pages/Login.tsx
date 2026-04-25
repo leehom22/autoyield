@@ -5,12 +5,30 @@ import { useToastStore } from '../store/toastStore';
 import { Brain, TrendingUp, Truck, BarChart3, ShieldCheck, FileText } from 'lucide-react';
 
 const F = [
-  { icon: Brain, title: 'Dual-Agent Decision Engine', desc: 'Adversarial P-Agent vs R-Agent reasoning on every decision.', c: 'var(--cyan)' },
-  { icon: TrendingUp, title: 'Real-time P&L Optimization', desc: 'Dynamic menu pricing driven by live market data.', c: 'var(--green)' },
-  { icon: Truck, title: 'Automated Supply Chain', desc: 'Intelligent PO creation and supplier scoring.', c: 'var(--orange)' },
-  { icon: BarChart3, title: 'Predictive Forecasting', desc: 'Weekly AI reports with strategic recommendations.', c: 'var(--purple)' },
-  { icon: ShieldCheck, title: 'Human-in-the-Loop', desc: 'Configurable approval boundaries for operators.', c: 'var(--cyan)' },
-  { icon: FileText, title: 'Invoice OCR Processing', desc: 'AI extraction, validation, and anomaly detection.', c: 'var(--green)' },
+  { 
+    icon: Brain, title: 'Dual-Agent Debate', badge: '< 10s', c: 'var(--cyan)',
+    desc: 'P-Agent (Profit) vs R-Agent (Risk) – triggered by price spikes, stockouts, or surges.' 
+  },
+  { 
+    icon: TrendingUp, title: 'Real-time Margin Protection', badge: '8D Sense', c: 'var(--green)',
+    desc: '8-dimensional sensing (inventory, supplier, staff, macro, festivals, orders) → auto-price.' 
+  },
+  { 
+    icon: Truck, title: 'Autonomous Procurement', badge: 'Spike→PO', c: 'var(--orange)',
+    desc: 'Auto-detect spikes → evaluate alternatives → contact supplier → create PO.' 
+  },
+  { 
+    icon: BarChart3, title: 'Smart Demand Forecasting', badge: 'Predictive', c: 'var(--purple)',
+    desc: 'Festival + macro + historical orders → predict surge/drop → auto-adjust reorder triggers.' 
+  },
+  { 
+    icon: ShieldCheck, title: 'Human Authorization', badge: 'Limits', c: 'var(--cyan)',
+    desc: 'Set spend limits (RM500), price caps (15%). High-risk actions request operator approval.' 
+  },
+  { 
+    icon: FileText, title: 'Unstructured Ingestion', badge: '> 20%', c: 'var(--green)',
+    desc: 'OCR + GLM-4V → extract items, detect price spikes (>20%) → trigger inventory debate.' 
+  },
 ];
 
 export default function Login() {
@@ -39,14 +57,68 @@ export default function Login() {
           <p style={{ fontSize: 13, color: 'var(--text-1)', marginBottom: 28, lineHeight: 1.6, maxWidth: 400 }}>
             Real-time simulation engine with dual-agent adversarial reasoning for menu pricing, supply chain optimization, and financial decision-making.
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          
+          {/* 2. 优化网格布局与卡片设计 */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(2, 1fr)', /* 强制 50/50 绝对对齐 */
+            // 使用边框折叠思路：外层给顶部和左侧线
+            borderTop: '1px solid var(--border-subtle)',
+            borderLeft: '1px solid var(--border-subtle)',
+            marginTop: 16
+          }}>
             {F.map((f, i) => (
-              <div key={i} className="login-feature">
-                <div className="lf-icon" style={{ background: `${f.c}11`, border: `1px solid ${f.c}33` }}><f.icon size={15} color={f.c} /></div>
-                <div><div style={{ fontWeight: 600, fontSize: 11, marginBottom: 1 }}>{f.title}</div><div style={{ fontSize: 10, color: 'var(--text-2)', lineHeight: 1.3 }}>{f.desc}</div></div>
+              <div key={i} style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                padding: '16px 12px',
+                // 每个格子给右侧和底部线，形成完整的网格感
+                borderRight: '1px solid var(--border-subtle)',
+                borderBottom: '1px solid var(--border-subtle)',
+                minHeight: '110px', /* 保证纵向也均匀 */
+                boxSizing: 'border-box'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div style={{ 
+                    padding: '5px', 
+                    background: `${f.c}10`, 
+                    border: `1px solid ${f.c}30`, 
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <f.icon size={14} color={f.c} />
+                  </div>
+                  {/* Badge 放在右上角，作为数据点暗示 */}
+                  <span style={{ 
+                    fontSize: 8, 
+                    fontWeight: 700, 
+                    color: f.c, 
+                    opacity: 0.8,
+                    letterSpacing: '0.5px',
+                    fontFamily: 'var(--mono)'
+                  }}>
+                    {/* 之前建议的 Badge 数据 */}
+                    {i === 0 ? '< 10S' : i === 1 ? '8D SENSE' : i === 2 ? 'SPIKE→PO' : i === 3 ? 'WEEKLY' : i === 4 ? 'RM500' : '> 20%'}
+                  </span>
+                </div>
+
+                <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--text-0)', marginBottom: 4 }}>
+                  {f.title}
+                </div>
+                
+                <div style={{ 
+                  fontSize: 10, 
+                  color: 'var(--text-2)', 
+                  lineHeight: 1.5,
+                  maxWidth: '100%' 
+                }}>
+                  {f.desc}
+                </div>
               </div>
             ))}
           </div>
+          
           <div style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-2)' }}>
             Hackathon 2026 · GLM-4 + Supabase Realtime
           </div>
