@@ -36,17 +36,17 @@ export default function DashboardLayout() {
   }, []);
 
   // Mock simulation time advance
-  useEffect(() => {
-    if (connected) return;
-    const iv = setInterval(() => {
-      setSseState((prev: any) => ({
-        ...prev,
-        simulated_time: new Date(new Date(prev.simulated_time || Date.now()).getTime() + 60000).toISOString(),
-        queue_length: Math.max(0, (prev.queue_length || 5) + Math.floor(Math.random() * 5) - 2),
-      }));
-    }, 2000);
-    return () => clearInterval(iv);
-  }, [connected]);
+  // useEffect(() => {
+  //   if (connected) return;
+  //   const iv = setInterval(() => {
+  //     setSseState((prev: any) => ({
+  //       ...prev,
+  //       simulated_time: new Date(new Date(prev.simulated_time || Date.now()).getTime() + 60000).toISOString(),
+  //       queue_length: Math.max(0, (prev.queue_length || 5) + Math.floor(Math.random() * 5) - 2),
+  //     }));
+  //   }, 2000);
+  //   return () => clearInterval(iv);
+  // }, [connected]);
 
   const simTime = sseState.simulated_time ? new Date(sseState.simulated_time) : null;
   const tabs: { key: Tab; icon: any; label: string }[] = [

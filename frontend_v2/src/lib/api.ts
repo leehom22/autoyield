@@ -4,7 +4,7 @@ export async function adjustVelocity(multiplier: number) {
   const res = await fetch(`${API_BASE}/api/sandbox/adjust-velocity`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ velocity_multiplier: multiplier })
+    body: JSON.stringify({ order_velocity_multiplier: multiplier })
   });
   return res.json();
 }
