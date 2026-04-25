@@ -34,12 +34,7 @@ export default function KdsQueue() {
       .channel('kds-realtime')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'kds_queue' },
-        () => fetchQueue()
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'kds_queue' },
+        { event: '*', schema: 'public', table: 'kds_queue' },
         () => fetchQueue()
       )
       .subscribe();

@@ -53,27 +53,27 @@ class NotificationApproval(BaseModel):
 # ─────────────────────────────────────────────
 # Lifespan Management (Startup/Shutdown)
 # ─────────────────────────────────────────────
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     # Startup: Start the World Simulation Engine
-#     engine_task = asyncio.create_task(world_engine.run_loop())
-#     print("✅ AutoYield Kernel started. World simulation engine is running.")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Start the World Simulation Engine
+    engine_task = asyncio.create_task(world_engine.run_loop())
+    print("✅ AutoYield Kernel started. World simulation engine is running.")
     
-#     # Initialize the Agent Graph, Scheduler and Proactive Monitoring globally once
-#     app.state.graph = get_graph()
-#     start_scheduler(app.state.graph)
-#     monitor_task = asyncio.create_task(crisis_monitor_loop(app))
+    # Initialize the Agent Graph, Scheduler and Proactive Monitoring globally once
+    app.state.graph = get_graph()
+    start_scheduler(app.state.graph)
+    monitor_task = asyncio.create_task(crisis_monitor_loop(app))
     
-#     yield
+    yield
     
-#     # Shutdown: Stop all the engine and tasks
-#     shutdown_scheduler()
-#     world_engine.is_running = False
-#     monitor_task.cancel()
-#     try:
-#         await asyncio.wait_for(engine_task, timeout=5.0)
-#     except (asyncio.CancelledError, asyncio.TimeoutError):
-#         print("🛑 World simulation engine shut down.")
+    # Shutdown: Stop all the engine and tasks
+    shutdown_scheduler()
+    world_engine.is_running = False
+    monitor_task.cancel()
+    try:
+        await asyncio.wait_for(engine_task, timeout=5.0)
+    except (asyncio.CancelledError, asyncio.TimeoutError):
+        print("🛑 World simulation engine shut down.")
 
 # ─────────────────────────────────────────────
 # App Initialization
@@ -82,7 +82,7 @@ app = FastAPI(
     title="AutoYield Dual-Agent Kernel",
     description="Autonomous F&B Profit & Operations Kernel + AI Agent API",
     version="2.0",
-    # lifespan=lifespan
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -155,4 +155,4 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     # Start the FastAPI server
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8080)
