@@ -21,7 +21,7 @@ from app.engine.simulator import get_current_simulated_time
 # ─────────────────────────────────────────────
 MAX_DEBATE_ROUNDS      = 3    # R-Agent forced to concede after this many rounds
 MAX_SUPERVISOR_RETRIES = 2    # Supervisor loops before falling back to executor
-MAX_TOOL_CALLS_PER_NODE = 3   # Hard cap on tool-call loops per node visit
+MAX_TOOL_CALLS_PER_NODE = 5   # Hard cap on tool-call loops per node visit
 HIGH_STAKES_SPEND_RM   = 500  # Notify human if spend exceeds this
 HIGH_STAKES_PRICE_PCT  = 0.15 # Notify human if price change exceeds this
 
@@ -67,8 +67,8 @@ class AgentState(TypedDict):
     node_tool_call_count:   int
 
     final_response:         str
-    error_state:            str
-
+    error_state:            str 
+    api_response: dict
 
 # ─────────────────────────────────────────────
 # Prompts
@@ -395,15 +395,6 @@ def _extract_tool_summary(messages: list[BaseMessage], max_results: int = 3) -> 
         parts.append(f"[{tm.name}]: {content}")
     return "\n".join(parts)
 
-
-def _last_ai_summary(messages: list[BaseMessage]) -> str:
-    """Returns the content of the most recent AIMessage that isn't a tool call."""
-    for m in reversed(messages):
-        if isinstance(m, AIMessage) and m.content and not getattr(m, "tool_calls", None):
-            return m.content[:800]
-    return "No summary available."
-
-
 def _safe_llm_call(llm, messages: list, node_name: str) -> AIMessage:
     """
     Wraps any LLM call. On failure, returns a graceful fallback AIMessage
@@ -416,7 +407,35 @@ def _safe_llm_call(llm, messages: list, node_name: str) -> AIMessage:
         print(f"⚠ {error_msg}")
         return AIMessage(content=f"SYSTEM ERROR: {error_msg}. Routing to safe termination.")
 
+def build_api_response(state: AgentState) -> dict:
+    return {
+        "message": state.get("final_response")
+            or state.get("r_agent_position")
+            or state.get("p_agent_position")
+            or state.get("supervisor_summary")
+            or "No response generated.",
 
+        "route": {
+            "decision_type": state.get("decision_type", "unknown"),
+            "decision_domain": state.get("decision_domain", "unknown"),
+            "debate_started": state.get("debate_started", False),
+            "consensus_reached": state.get("consensus_reached", False),
+        },
+
+        "agents": {
+            "p_agent_position": state.get("p_agent_position"),
+            "r_agent_position": state.get("r_agent_position"),
+            "debate_rounds": state.get("debate_rounds", 0),
+        },
+
+        "execution": {
+            "final_response": state.get("final_response"),
+            "human_approval_sent": state.get("human_approval_sent", False),
+            "decision_saved": state.get("decision_saved", False),
+        },
+
+        "error": state.get("error_state"),
+    }
 # ─────────────────────────────────────────────
 # Debug printing helpers
 # ─────────────────────────────────────────────
@@ -484,6 +503,28 @@ def debug_state(node: str, state: dict):
         else:
             content = str(getattr(last, "content", ""))[:250]
             dim(f"Last message: {type(last).__name__}: {content}")
+            
+def _classify_chat_request(user_query: str):
+    lower = user_query.lower()
+
+    if any(x in lower for x in [
+        "discount", "promotion", "campaign", "voucher",
+        "price", "pricing", "flash sale", "bundle"
+    ]):
+        return "debate", "pricing"
+
+    if any(x in lower for x in [
+        "supplier", "vendor", "purchase order", "bulk purchase",
+        "restock", "procure"
+    ]):
+        return "debate", "procurement"
+
+    if any(x in lower for x in [
+        "staff", "kitchen", "capacity", "shift", "queue", "bottleneck"
+    ]):
+        return "debate", "ops"
+
+    return "direct", "unknown"
 # ─────────────────────────────────────────────
 # Nodes
 # ─────────────────────────────────────────────
@@ -508,13 +549,17 @@ def supervisor_node(state: AgentState) -> AgentState:
         state.get("trigger_signal", "")
     )
 
+    chat_intent, chat_domain = _classify_chat_request(user_query)
+    
     intent: Literal["debate", "direct", "unknown"] = (
         trigger_intent if trigger_intent != "unknown"
+        else chat_intent if chat_intent != "unknown"
         else state.get("decision_type", "unknown")
     )
 
     domain: Literal["pricing", "procurement", "ops", "clarification", "unknown"] = (
         trigger_domain if trigger_domain != "unknown"
+        else chat_domain if chat_domain != "unknown"
         else state.get("decision_domain", "unknown")
     )
 
@@ -566,10 +611,11 @@ def p_agent_node(state: AgentState) -> AgentState:
     ]
     already_simulated = len(tool_msgs) > 0
 
-    tools = [] if already_simulated else [
-        t for t in get_all_lc_tools() if t.name == "simulate_yield_scenario"
-    ]
-
+    # tools = [] if already_simulated else [
+    #     t for t in get_all_lc_tools() if t.name == "simulate_yield_scenario"
+    # ]
+    tools = []
+    
     llm = get_glm().bind_tools(tools)
 
     tool_summary = _extract_tool_summary(state["messages"])
@@ -723,7 +769,6 @@ def executor_node(state: AgentState) -> AgentState:
     # Build decision text for the high-stakes check
     if state.get("decision_type") == "debate":
         decision_text = (
-            f"{state.get('user_query', '')}\n"
             f"{state.get('p_agent_position', '')}\n"
             f"{state.get('r_agent_position', '')}"
         )
@@ -856,7 +901,18 @@ def save_decision_node(state: AgentState) -> AgentState:
 
     debug_state("save_decision:end", new_state)
     return new_state
-    
+
+def response_node(state: AgentState) -> AgentState:
+    api_response = build_api_response(state)
+
+    new_state = {
+        **state,
+        "api_response": api_response,
+    }
+
+    debug_state("response_node:end", new_state)
+    return new_state
+
 # ─────────────────────────────────────────────
 # Routing — reads state only, never parses LLM output
 # ─────────────────────────────────────────────
@@ -867,31 +923,29 @@ def route_after_supervisor(state: AgentState) -> str:
 
     domain = state.get("decision_domain", "unknown")
     intent = state.get("decision_type", "unknown")
-
-    # If supervisor already knows this is a debate case,
-    # do not let extra tool calls trap the graph forever.
-    if intent == "debate" and not has_tool_calls:
-        return "p_agent"
+    tool_count = state.get("node_tool_call_count", 0)
 
     if has_tool_calls:
-        if state.get("node_tool_call_count", 0) >= MAX_TOOL_CALLS_PER_NODE:
-            # Tool cap reached. Continue with current classification.
+        if tool_count >= MAX_TOOL_CALLS_PER_NODE:
+            warn("supervisor tool cap reached")
+
             if intent == "debate":
                 return "p_agent"
+
             if domain == "procurement":
                 return "procurement_agent"
+
             if intent == "direct":
                 return "executor"
-            return "supervisor"
+
+            # IMPORTANT: never return supervisor here
+            return "response"
 
         return "tool_node"
 
     if domain == "clarification":
-        return END
+        return "response"
 
-    # IMPORTANT:
-    # Debate must be checked BEFORE procurement.
-    # Otherwise procurement debate is swallowed by procurement_agent.
     if intent == "debate":
         return "p_agent"
 
@@ -901,13 +955,14 @@ def route_after_supervisor(state: AgentState) -> str:
     if intent == "direct":
         return "executor"
 
-    if state.get("supervisor_retries", 0) < MAX_SUPERVISOR_RETRIES:
-        return "supervisor"
-
-    print(f"⚠ Supervisor could not classify intent after {MAX_SUPERVISOR_RETRIES} retries — defaulting to direct")
-    return "executor"
+    return "response"
 
 def route_after_p_agent(state: AgentState) -> str:
+    # P-Agent should only argue once per debate round.
+    # Once it has produced a position, always go to R-Agent.
+    if state.get("p_agent_position"):
+        return "r_agent"
+
     last = state["messages"][-1]
 
     if getattr(last, "tool_calls", None):
@@ -916,7 +971,6 @@ def route_after_p_agent(state: AgentState) -> str:
         return "tool_node"
 
     return "r_agent"
-
 
 def route_after_r_agent(state: AgentState) -> str:
     if state.get("consensus_reached") or state.get("debate_rounds", 0) >= MAX_DEBATE_ROUNDS:
@@ -928,47 +982,45 @@ def route_after_executor(state: AgentState) -> str:
 
     last = state["messages"][-1]
 
-    # If executor calls a tool, go execute the tool first.
     if getattr(last, "tool_calls", None):
         if state.get("node_tool_call_count", 0) >= MAX_TOOL_CALLS_PER_NODE:
             if state.get("debate_started", False):
                 warn("executor → save_decision | debate flow tool cap hit")
                 return "save_decision"
 
-            warn("executor → END | non-debate tool cap hit")
-            return END
+            warn("executor → response | non-debate tool cap hit")
+            return "response"
 
         ok("executor → tool_node | tool call detected")
         return "tool_node"
 
-    # ONLY P/R debate flow can save decision.
     if state.get("debate_started", False):
         ok("executor → save_decision | P/R debate completed")
         return "save_decision"
 
-    dim("executor → END | non-debate flow")
-    return END
+    dim("executor → response | non-debate flow")
+    return "response"
 
 def route_after_tools(state: AgentState) -> str:
     handler = state.get("pending_handler", "supervisor")
 
-    # If a human approval notification was sent after P/R debate,
-    # the final node must still be save_decision.
     if state.get("human_approval_sent", False):
         if state.get("debate_started", False):
             ok("tool_node → save_decision | human approval sent after P/R debate")
             return "save_decision"
 
-        ok("tool_node → END | human approval sent in non-debate flow")
-        return END
+        ok("tool_node → response | human approval sent in non-debate flow")
+        return "response"
 
     if handler == "executor":
         return "executor"
 
     if handler == "r_agent":
         return "r_agent"
-
+    
     if handler == "p_agent":
+        if state.get("p_agent_position"):
+            return "r_agent"
         return "p_agent"
 
     if handler == "procurement_agent":
@@ -989,6 +1041,7 @@ def build_assistant_graph():
     builder.add_node("executor",   executor_node)
     builder.add_node("tool_node",  ToolNode(get_all_lc_tools()))
     builder.add_node("procurement_agent", procurement_agent_node)
+    builder.add_node("response", response_node)
     builder.add_node("save_decision", save_decision_node)
     
     builder.add_edge(START, "supervisor")
@@ -999,6 +1052,7 @@ def build_assistant_graph():
         "procurement_agent": "procurement_agent",
         "executor": "executor",
         "supervisor": "supervisor",
+        "response": "response",
         END: END,
     })
 
@@ -1015,6 +1069,7 @@ def build_assistant_graph():
     builder.add_conditional_edges("executor", route_after_executor, {
         "tool_node": "tool_node",
         "save_decision": "save_decision",
+        "response": "response",
         END: END,
     })
 
@@ -1025,10 +1080,12 @@ def build_assistant_graph():
         "r_agent": "r_agent",
         "procurement_agent": "procurement_agent",
         "save_decision": "save_decision",
+        "response": "response",
         END: END,
     })
     
-    builder.add_edge("save_decision", END)
+    builder.add_edge("save_decision", "response")
+    builder.add_edge("response", END)
 
     return builder.compile()
 

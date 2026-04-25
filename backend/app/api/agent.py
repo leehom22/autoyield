@@ -93,10 +93,11 @@ async def upload_invoice(
             "trigger_signal": "INVOICE_PRICE_SPIKE",
             "should_persist_decision": True,
         })
+        execution_result = result.get("execution_result") or {}
         return {
             "status": "debate_triggered",
             "response": result.get("final_response", ""),
-            "decision_saved": result.get("decision_saved", False),
+            "decision_saved": execution_result.get("decision_saved", False),
         }
     else:
         # Store into DB
