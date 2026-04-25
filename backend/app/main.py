@@ -17,6 +17,7 @@ from app.api import stream, sandbox, agent, webhook
 from app.core.scheduler import start_scheduler, shutdown_scheduler
 from app.api import chat
 from app.api import permission
+from app.api import admin
 
 from app.core.supabase import supabase
 from app.graph.forecast_graph import build_forecast_graph
@@ -97,8 +98,8 @@ app.add_middleware(
 # ─────────────────────────────────────────────
 @app.get("/api/notifications", tags=["Operator"])
 async def get_notifications(unread_only: bool = True):
-    db = supabase()
-    query = db.table("notifications").select("*").order("created_at", desc=True)
+    # db = supabase()
+    # query = db.table("notifications").select("*").order("created_at", desc=True)
     query = supabase.table("notifications").select("*").order("created_at", desc=True)
     if unread_only:
         query = query.eq("is_read", False)
@@ -107,9 +108,20 @@ async def get_notifications(unread_only: bool = True):
 
 @app.post("/api/notifications/approve", tags=["Operator"])
 async def approve_notification(req: NotificationApproval):
-    db = supabase()
-    db.table("notifications").update({"is_read": True}).eq("notification_id", req.notification_id).execute()
-    supabase.table("notifications").update({"is_read": True}).eq("notification_id", req.notification_id).execute()
+    # db = supabase()
+    # db.table("notifications").update({"is_read": True}).eq("notification_id", req.notification_id).execute()
+    result = supabase.table("notifications").select("*").eq("notification_id", req.notification_id).execute()
+    if not result.data:
+        # Fallback, query with id（UUID）
+        result = supabase.table("notifications").select("*").eq("id", req.notification_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    new_status = "approved" if req.approved else "rejected"
+    supabase.table("notifications").update({
+        "is_read": True,
+        "status": new_status
+    }).eq("notification_id", req.notification_id).execute()
 
     if req.approved:
         approval_msg = f"Human approved notification {req.notification_id}. Note: {req.operator_note or 'Approved'}. Execute action."
@@ -129,6 +141,7 @@ app.include_router(agent.router, prefix="/api/agent", tags=["Agent Interact"])
 # app.include_router(webhook.router, prefix="/api/webhooks", tags=["Internal Triggers"])   Currently replaced by crisis_monitor
 app.include_router(stream.router, prefix="/api/stream", tags=["SSE Streaming"])
 app.include_router(permission.router, prefix="/api/permissions", tags=["Authorization Panel"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 @app.get("/health", tags=["System"])
 async def health():
@@ -138,4 +151,10 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     # Start the FastAPI server
+<<<<<<< HEAD
     uvicorn.run(app, host="127.0.0.1", port=8000)
+=======
+    for route in app.routes:
+        print(route.path)
+    uvicorn.run(app, host="127.0.0.1", port=8080)
+>>>>>>> David-Frontend

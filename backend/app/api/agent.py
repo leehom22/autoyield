@@ -30,7 +30,11 @@ async def upload_invoice(
     app = request.app
     graph = get_graph()
     
+<<<<<<< HEAD
     # Read and Parse Invoice Image
+=======
+    # Parse Invoice Image
+>>>>>>> David-Frontend
     b64 = base64.b64encode(contents).decode()
     image_url = f"data:{file.content_type};base64,{b64}"
     print(f"Invoice received: {file.filename}, type={file.content_type}, size={len(contents)} bytes")

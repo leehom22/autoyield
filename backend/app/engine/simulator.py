@@ -93,6 +93,7 @@ class WorldSimulationEngine:
 
     async def broadcast_state(self):
         # Broadcast Payload Structure for frontend SSE consumption
+        print(f"[DEBUG] broadcast_state called, clients: {len(self.sse_clients)}")
         payload = {
             "simulated_time": self.simulated_time.strftime("%Y-%m-%d %H:%M"),
             "is_paused": self.is_paused,
@@ -103,19 +104,23 @@ class WorldSimulationEngine:
         
         # Push to SSE clients
         async with self._sse_lock:
-            for queue in self.sse_clients:
+            for queue in self.sse_clients[:]:
                 try:
                     await queue.put(message)
                 except Exception as e:
-                    logger.error(f"SSE broadcast error: {e}")
+                    print(f"SSE broadcast error to queue: {e}")
+                    if queue in self.sse_clients:
+                        self.sse_clients.remove(queue)
 
     
     async def run_loop(self):
         self.is_running = True
+        self.is_paused = False
         self.menu_cache = await asyncio.to_thread(get_active_menu)
         print("🌍 [World Engine] Started. 1 tick = 30 sim minutes.")
         
         while self.is_running:
+            print(f"[DEBUG] loop iteration, is_paused={self.is_paused}") 
             if not self.is_paused:
                 # 1. Time flow
                 self.tick_count += 1
