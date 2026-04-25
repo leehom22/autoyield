@@ -12,6 +12,9 @@ from langgraph.prebuilt import ToolNode
 
 from app.tools.mcp_tools_call import get_all_lc_tools
 
+from app.core.supabase import supabase
+from app.engine.simulator import get_current_simulated_time
+
 load_dotenv()
 
 # ─────────────────────────────────────────────
@@ -62,7 +65,8 @@ class ForecastState(TypedDict):
     debate_rounds: int
     consensus_reached: bool
     debate_started: bool
-
+    
+    decision_saved: bool
 
 # ─────────────────────────────────────────────
 # Prompts
@@ -86,6 +90,7 @@ IMPORTANT:
 
 After tools are done, output:
 SIGNAL_READY: true
+Use RM instead of USD for any financial figures.
 """
 
 SIGNAL_AGENT_PROMPT = """
@@ -106,6 +111,7 @@ Example:
 - Seafood low stock → constraint
 
 Do NOT recommend actions.
+Use RM instead of USD for any financial figures.
 """
 
 FORECAST_AGENT_PROMPT = """
@@ -133,6 +139,7 @@ Recommendation:
 
 Do NOT call tools.
 Do NOT debate.
+Use RM instead of USD for any financial figures.
 """
 
 NOTIFICATION_PROMPT = """
@@ -153,6 +160,7 @@ Rules:
   - risk_level
 
 Do not call any other tool.
+Use RM instead of USD for any financial figures.
 """
 
 FORECAST_P_AGENT_PROMPT = """
@@ -168,6 +176,7 @@ FORECAST_P_AGENT_PROMPT = """
     - using demand forecast signals
 
     Do NOT call tools.
+    Use RM instead of USD for any financial figures. 
     Give 2-4 sentences.
     End with one concrete recommendation.
 """
@@ -283,7 +292,14 @@ def _extract_tool_summary(messages, max_results=3):
 
     return "\n".join(parts)
 
+def _has_system_error(state: ForecastState) -> bool:
+    if not state.get("messages"):
+        return False
 
+    last = state["messages"][-1]
+    content = str(getattr(last, "content", ""))
+
+    return "SYSTEM ERROR" in content
 # ─────────────────────────────────────────────
 # Nodes
 # ─────────────────────────────────────────────
@@ -375,7 +391,7 @@ def supervisor_node(state: ForecastState) -> ForecastState:
         "node_tool_call_count": state.get("node_tool_call_count", 0)
         + (1 if getattr(response, "tool_calls", None) else 0),
     }
-    debug_state("supervisor:start", new_state)
+    debug_state("supervisor:end", new_state)
     return new_state
 
 
@@ -401,6 +417,7 @@ def signal_agent_node(state: ForecastState) -> ForecastState:
         "node_tool_call_count": 0,
     }
     debug_state("signal_agent:end", new_state)
+    return new_state
 
 def _extract_risk_level(text: str) -> str:
     lower = text.lower()
@@ -444,11 +461,11 @@ def forecast_agent_node(state: ForecastState) -> ForecastState:
         "pending_handler": "notification",
         "node_tool_call_count": 0,
     }
-    debug_state("forecast_agent:start", new_state)
+    debug_state("forecast_agent:end", new_state)
     return new_state
     
 def notification_node(state: ForecastState) -> ForecastState:
-    debug_state("forecast_agent:start", state)
+    debug_state("notification_node:start", state)
     if state.get("notification_sent", False):
         return {
             **state,
@@ -491,7 +508,7 @@ def notification_node(state: ForecastState) -> ForecastState:
         "notification_sent": bool(getattr(response, "tool_calls", None)),
         "node_tool_call_count": 1 if getattr(response, "tool_calls", None) else 0,
     }
-    debug_state("forecast_agent:end", new_state)
+    debug_state("notification_node:end", new_state)
     return new_state
     
 
@@ -515,7 +532,7 @@ def crisis_optimizer_node(state: ForecastState) -> ForecastState:
     
     new_state = {
         **state,
-        "forecast_path": "crisis",
+        "forecast_path": state.get("forecast_path", "standard"),
         "signal_summary": state.get("signal_summary", "") or crisis_msg,
         "forecast_result": (
             state.get("forecast_result", "")
@@ -550,7 +567,7 @@ def revised_plan_node(state: ForecastState) -> ForecastState:
 
     new_state = {
         **state,
-        "forecast_path": "crisis",
+        "forecast_path": state.get("forecast_path", "standard"),
         "revised_plan": revised,
         "forecast_result": revised,
         "macro_risk_level": "high",
@@ -559,6 +576,48 @@ def revised_plan_node(state: ForecastState) -> ForecastState:
     }
     debug_state("revised_plan:end", new_state)
     return new_state
+
+def save_forecast_decision_node(state: ForecastState) -> ForecastState:
+    debug_state("save_forecast_decision:start", state)
+
+    if state.get("decision_saved", False):
+        warn("Forecast decision already saved")
+        return state
+
+    final_response = (
+        state.get("forecast_result")
+        or state.get("revised_plan")
+        or state.get("r_agent_position")
+        or state.get("p_agent_position")
+        or "Forecast completed."
+    )
+
+    try:
+        supabase.table("decision_logs").insert({
+            "trigger_signal": "WEEKLY_FORECAST",
+            "timestamp": get_current_simulated_time().isoformat(),
+            "p_agent_argument": state.get("p_agent_position", ""),
+            "r_agent_argument": state.get("r_agent_position", ""),
+            "resolution": "Report generated",
+            "action_taken": final_response[:500],
+        }).execute()
+
+        new_state = {
+            **state,
+            "decision_saved": True,
+            "forecast_result": final_response,
+        }
+
+        debug_state("save_forecast_decision:end", new_state)
+        return new_state
+
+    except Exception as e:
+        warn(f"Failed to save forecast decision: {str(e)[:200]}")
+        return {
+            **state,
+            "decision_saved": False,
+        }
+        
     
 # ─────────────────────────────────────────────
 # Routing
@@ -609,28 +668,31 @@ def route_after_forecast_r_agent(state):
 def route_after_tools(state):
     debug_state("route_after_tools", state)
 
-    handler=state.get("pending_handler","supervisor")
+    handler = state.get("pending_handler", "supervisor")
 
-    if handler=="notification":
-        ok("tool_node → END")
-        return END
+    if handler == "notification":
+        ok("tool_node → save_forecast_decision")
+        return "save_forecast_decision"
 
-    if handler=="supervisor":
+    if handler == "supervisor":
         ok("tool_node → signal_agent")
         return "signal_agent"
 
     warn("tool_node fallback → END")
     return END
 
-
 def route_after_signal(state):
     debug_state("route_after_signal", state)
 
-    signals=state.get("signal_summary","").lower()
+    if _has_system_error(state):
+        warn("signal_agent failed → save_forecast_decision")
+        return "save_forecast_decision"
 
-    crisis_keywords=[
-        "oil","usd/myr","inflation",
-        "spike","shortage","crisis"
+    signals = state.get("signal_summary", "").lower()
+
+    crisis_keywords = [
+        "oil", "usd/myr", "inflation",
+        "spike", "shortage", "crisis"
     ]
 
     if any(k in signals for k in crisis_keywords):
@@ -640,19 +702,22 @@ def route_after_signal(state):
     ok("signal_agent → standard_forecast")
     return "standard_forecast"
 
-
 def route_after_forecast(state: ForecastState):
     if state.get("plan_generated", False):
         return "notification_node"
     return END
 
 def route_after_notification(state: ForecastState):
+    debug_state("route_after_notification", state)
+
     last = state["messages"][-1]
 
     if getattr(last, "tool_calls", None):
+        ok("notification_node → tool_node")
         return "tool_node"
 
-    return END
+    ok("notification_node → save_forecast_decision")
+    return "save_forecast_decision"
 
 # ─────────────────────────────────────────────
 # Build Graph
@@ -678,6 +743,8 @@ def build_forecast_graph():
     builder.add_node("forecast_p_agent", forecast_p_agent_node)
     builder.add_node("forecast_r_agent", forecast_r_agent_node)
 
+    builder.add_node("save_forecast_decision", save_forecast_decision_node)
+    
     builder.add_conditional_edges(START, route_from_start, {
         "supervisor": "supervisor",
         "crisis_optimizer": "crisis_optimizer",
@@ -690,31 +757,38 @@ def build_forecast_graph():
 
     builder.add_conditional_edges("tool_node", route_after_tools, {
         "signal_agent": "signal_agent",
+        "save_forecast_decision": "save_forecast_decision",
         END: END,
     })
 
     builder.add_conditional_edges("signal_agent", route_after_signal, {
         "standard_forecast": "standard_forecast",
         "crisis_optimizer": "crisis_optimizer",
+        "save_forecast_decision": "save_forecast_decision",
     })
 
-    builder.add_edge("standard_forecast", "reorder_trigger")
-    builder.add_edge("reorder_trigger", "kitchen_prewarn")
-    builder.add_edge("kitchen_prewarn", "notification_node")
+    builder.add_edge("standard_forecast", "forecast_p_agent")
 
     builder.add_edge("crisis_optimizer", "forecast_p_agent")
+    
     builder.add_edge("forecast_p_agent", "forecast_r_agent")
+
     builder.add_conditional_edges("forecast_r_agent", route_after_forecast_r_agent, {
         "forecast_p_agent": "forecast_p_agent",
         "constraint_node": "constraint_node",
     })
+
     builder.add_edge("constraint_node", "revised_plan")
-    builder.add_edge("revised_plan", "notification_node")
+    builder.add_edge("revised_plan", "reorder_trigger")
+    builder.add_edge("reorder_trigger", "kitchen_prewarn")
+    builder.add_edge("kitchen_prewarn", "notification_node")
 
     builder.add_conditional_edges("notification_node", route_after_notification, {
         "tool_node": "tool_node",
-        END: END,
+        "save_forecast_decision": "save_forecast_decision",
     })
+    
+    builder.add_edge("save_forecast_decision", END)
 
     return builder.compile()
 
