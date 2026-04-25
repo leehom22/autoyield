@@ -61,26 +61,30 @@ async def trigger_crisis(payload: GodModePayload):
     # 1. Inventory Adjustment
     if qty_mult != 1.0 or cost_mult != 1.0:
         if payload.inventory_target_id:
-            result = supabase.table("inventory").select("qty, unit_cost").eq("id", payload.inventory_target_id).execute()
-            if result.data:
-                item = result.data[0]
-                updates = {}
-                if qty_mult != 1.0:
-                    updates["qty"] = item["qty"] * qty_mult
-                if cost_mult != 1.0:
-                    updates["unit_cost"] = item["unit_cost"] * cost_mult
-                if updates:
-                    supabase.table("inventory").update(updates).eq("id", payload.inventory_target_id).execute()
+            result = supabase.table("inventory").select("id, qty, unit_cost, min_stock_level").eq("id", payload.inventory_target_id).execute()
+            items_to_update = result.data if result.data else []
         else:
-            items = supabase.table("inventory").select("id, qty, unit_cost").execute()
-            for item in items.data:
-                updates = {}
-                if qty_mult != 1.0:
-                    updates["qty"] = item["qty"] * qty_mult
-                if cost_mult != 1.0:
-                    updates["unit_cost"] = item["unit_cost"] * cost_mult
-                if updates:
-                    supabase.table("inventory").update(updates).eq("id", item["id"]).execute()
+            items_to_update = supabase.table("inventory").select("id, qty, unit_cost, min_stock_level").execute().data
+
+        for item in items_to_update:
+            updates = {}
+            if qty_mult != 1.0:
+                if qty_mult > 1.0:
+                    # Boost based on the min stock level
+                    target_qty = float(item["min_stock_level"]) * qty_mult
+                    # Boost only when the stock lower than target qty
+                    if float(item["qty"]) < target_qty:
+                        updates["qty"] = target_qty
+                else:
+                    # Crash: Not lower than 1.0
+                    updates["qty"] = max(1.0, float(item["qty"]) * qty_mult)
+                
+            if cost_mult != 1.0:
+                base_cost = max(0.1, float(item["unit_cost"]))
+                updates["unit_cost"] = base_cost * cost_mult
+                
+            if updates:
+                supabase.table("inventory").update(updates).eq("id", item["id"]).execute()
 
     # 2. Oil Price Adjustment
     if payload.oil_price_multiplier != 1.0:

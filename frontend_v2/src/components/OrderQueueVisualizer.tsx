@@ -19,18 +19,22 @@ export default function OrderQueueVisualizer({ sseState }: { sseState: any }) {
   // }, []);
 
   useEffect(() => {
-  // Initial loads recent 30 orders
-  supabase.from('orders').select('*').order('timestamp', { ascending: false }).limit(30)
-    .then(({ data }) => { if (data) setOrders(data); });
+    // Initial loads recent 30 orders
+    supabase.from('orders').select('*').order('timestamp', { ascending: false }).limit(30)
+      .then(({ data }) => { if (data) setOrders(data); });
 
-  const sub = supabase.channel('orders_rt3')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (p) => {
-      setHasSub(true);
-      setOrders((prev) => [p.new as Order, ...prev].slice(0, 30));
-    })
-    .subscribe();
-  return () => { supabase.removeChannel(sub); };
-}, []);
+    const sub = supabase.channel('orders_rt3')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (p) => {
+        setHasSub(true);
+        if (p.eventType === 'INSERT') {
+          setOrders((prev) => [p.new as Order, ...prev].slice(0, 30));
+        } else if (p.eventType === 'DELETE') {
+          setOrders((prev) => prev.filter((o) => o.id !== p.old.id));
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, []);
 
   // Mock order generator when no real data
   // useEffect(() => {
@@ -75,10 +79,10 @@ export default function OrderQueueVisualizer({ sseState }: { sseState: any }) {
                 <td className="mono text-2" style={{ fontSize: 10 }}>{new Date(o.timestamp).toLocaleTimeString()}</td>
                 <td className="truncate" style={{ maxWidth: 180, fontSize: 11 }}>{parseItems(o.items)}</td>
                 <td><span className="badge badge-cyan" style={{ fontSize: 9 }}>{o.customer_segment}</span></td>
-                <td className="text-right mono">${(o.total_revenue ?? 0).toFixed(2)}</td>
+                <td className="text-right mono">RM{(o.total_revenue ?? 0).toFixed(2)}</td>
                 <td className="text-right">
                   <span style={{ color: (o.total_margin ?? 0) >= 0 ? 'var(--green)' : 'var(--red)', display: 'inline-flex', alignItems: 'center', gap: 2 }} className="mono">
-                    {(o.total_margin ?? 0) >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}${Math.abs(o.total_margin ?? 0).toFixed(2)}
+                    {(o.total_margin ?? 0) >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}RM{Math.abs(o.total_margin ?? 0).toFixed(2)}
                   </span>
                 </td>
               </tr>

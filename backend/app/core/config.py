@@ -13,7 +13,7 @@ class Settings:
     PRICE_SPIKE_THRESHOLD: float = 1.20
 
     # Simulation
-    SIM_TICK_REAL_SEC: float = 1.0
+    SIM_TICK_REAL_SEC: float = 2.0
     SIM_TICK_SIM_MIN: int = 30
     SIM_ORDER_PROCESS_CAPACITY: int = 3
     SIM_BASE_ORDERS_PER_TICK: int = 2

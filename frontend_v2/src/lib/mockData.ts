@@ -91,10 +91,37 @@ export const MOCK_NOTIFICATIONS = [
 ];
 
 export const MOCK_WEEKLY_REPORT = {
-  id: 'wr1', timestamp: d(1), trigger_signal: 'WEEKLY_FORECAST', resolution: 'Full consensus',
-  p_agent_argument: 'Revenue up 8.2% WoW driven by combo promotions. Chicken and prawn costs trending upward. Recommend pre-purchasing 2-week inventory buffer for volatile items. Marketing spend ROI at 3.2x — suggest increasing weekend social media budget by 20%.',
-  r_agent_argument: 'Agree on revenue trend. However, 2-week buffer ties up RM2,800 in working capital. Counter: 1-week buffer + negotiate fixed-price contracts with Farm Fresh. Marketing ROI calculation excludes customer acquisition cost — true ROI closer to 2.1x. Maintain current spend.',
-  action_taken: `Weekly Performance Summary (Simulated Week 12)\n\n📊 Revenue: RM18,450 (+8.2% WoW)\n📈 Gross Margin: 58.3% (target: 55%)\n🛒 Orders: 847 total (avg RM21.80/order)\n⭐ Top Seller: Nasi Lemak Special (186 orders)\n📉 Underperformer: Ayam Goreng Berempah (12 orders — hidden from menu)\n\nKey Actions Taken:\n1. Adjusted 3 menu prices based on ingredient cost changes\n2. Created 4 purchase orders totaling RM1,680\n3. Reassigned 2 prep tasks to balance staff workload\n4. Launched Roti + Teh Tarik combo (conversion rate: 34%)\n\nRecommendations:\n- Lock in chicken price with Farm Fresh via 30-day contract\n- Consider reintroducing Ayam Goreng with revised recipe/pricing\n- Expand delivery partnerships (currently 18% of revenue)`,
+  id: 'wr-final-001',
+  timestamp: new Date().toISOString(),
+  trigger_signal: 'WEEKLY_FORECAST',
+  resolution: 'Strategic Consensus Reached',
+  
+  p_agent_argument: 
+    "Revenue growth is robust at 12.4%, but our exposure to volatile seafood costs is at a critical 30-day high. " +
+    "**Atlantic Salmon** unit costs have spiked by 15% due to logistics surcharges. " +
+    "I recommend an immediate 8% price adjustment on premium mains to protect our net margins. " +
+    "We must prioritize high-margin 'Beverage' upselling to offset the protein cost burn.",
+
+  r_agent_argument: 
+    "An 8% price hike on signature dishes like **Seabass Aglio Olio** risks a 15% drop in 'Regular' segment retention. " +
+    "Our data shows sensitivity is high this month. " +
+    "Counter-proposal: Maintain current pricing but implement a 'Smart Portion' strategy for garnish and sides. " +
+    "We should secure a 90-day fixed-price contract with **Oceanic Seafood Supply** to hedge against further spikes.",
+
+  action_taken: 
+    "### 📊 Weekly Performance Summary\n\n" +
+    "* **Total Revenue:** RM 24,850.00 (+12.4% WoW)\n" +
+    "* **Net Margin:** 61.2% (Target: 60.0%)\n" +
+    "* **Top Performer:** *Seabass Aglio Olio* (215 orders)\n" +
+    "* **Critical Risk:** *Atlantic Salmon* stock level at 2.5 days buffer.\n\n" +
+    "### ✅ Key Actions Executed\n\n" +
+    "1. **Dynamic Pricing:** Adjusted *Grilled Salmon* price from RM42.00 to RM45.00 (+7%) to track unit cost surge.\n" +
+    "2. **Procurement Lock:** Finalized emergency PO for 40kg *Sea Bass Whole* at RM22.11/unit.\n" +
+    "3. **Ops Optimization:** Reassigned 2 staff from 'Bartender' to 'Line Cook' during Friday peak (19:00-21:00) to resolve prep bottlenecks.\n" +
+    "4. **Marketing:** Launched a low-inventory-drain 'Tea Tarik' bundle to boost ticket size without straining meat stocks.\n\n" +
+    "### 💡 Proactive Recommendations\n\n" +
+    "- **Inventory:** Transition to local suppliers for 'Organic Mixed Vegetables' to reduce carbon-tax related surcharges.\n" +
+    "- **Staffing:** Cross-train *Chen Hao* for KDS management as projected order velocity will exceed 2.5x next weekend.",
 };
 
 export const MOCK_SSE_STATE = {

@@ -65,74 +65,52 @@ export default function MacroTrendsChart() {
         </div>
       )}
 
-      {!loading && !isEmpty && (
-        <div style={{
-          background: 'var(--glass)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 'var(--radius)',
-          padding: '10px 6px 4px 0',
-        }}>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
-              <XAxis
-                dataKey="date"
-                tick={{ fill: 'var(--text-2)', fontSize: 9, fontFamily: 'var(--mono)' }}
-                axisLine={{ stroke: 'var(--border)' }}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: 'var(--text-2)', fontSize: 9, fontFamily: 'var(--mono)' }}
-                axisLine={false}
-                tickLine={false}
-                width={40}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 6,
-                  fontSize: 10,
-                  fontFamily: 'var(--font)',
-                  color: 'var(--text-0)',
-                  boxShadow: '0 4px 16px rgba(0,0,0,.5)',
-                }}
-                itemStyle={{ padding: '1px 0' }}
-                labelStyle={{ color: 'var(--text-1)', fontSize: 10, marginBottom: 4 }}
-              />
-              <Legend
-                iconType="circle"
-                iconSize={6}
-                wrapperStyle={{ fontSize: 10, fontFamily: 'var(--font)', color: 'var(--text-1)', paddingTop: 4 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="oil_price"
-                name="Oil Price"
-                stroke="var(--orange)"
-                strokeWidth={1.5}
-                dot={false}
-                activeDot={{ r: 3, fill: 'var(--orange)' }}
-              />
-              <Line
-                type="monotone"
-                dataKey="usd_myr"
-                name="USD/MYR"
-                stroke="var(--cyan)"
-                strokeWidth={1.5}
-                dot={false}
-                activeDot={{ r: 3, fill: 'var(--cyan)' }}
-              />
-              <Line
-                type="monotone"
-                dataKey="local_inflation"
-                name="Inflation"
-                stroke="var(--purple)"
-                strokeWidth={1.5}
-                dot={false}
-                activeDot={{ r: 3, fill: 'var(--purple)' }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+ {!loading && !isEmpty && (
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'stretch' }}>
+          
+          <div style={{
+            flex: 1,
+            background: 'var(--glass)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 'var(--radius)',
+            padding: '10px 6px 4px 0',
+          }}>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+                <XAxis dataKey="date" tick={{ fill: 'var(--text-2)', fontSize: 9, fontFamily: 'var(--mono)' }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
+                <YAxis domain={['auto', 'auto']} tick={{ fill: 'var(--text-2)', fontSize: 9, fontFamily: 'var(--mono)' }} axisLine={false} tickLine={false} width={30} />
+                <Tooltip
+                  contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 10, fontFamily: 'var(--font)', color: 'var(--text-0)', boxShadow: '0 4px 16px rgba(0,0,0,.5)' }}
+                  itemStyle={{ padding: '1px 0' }} labelStyle={{ color: 'var(--text-1)', fontSize: 10, marginBottom: 4 }}
+                />
+                <Legend iconType="circle" iconSize={6} wrapperStyle={{ fontSize: 10, fontFamily: 'var(--font)', color: 'var(--text-1)', paddingTop: 4 }} />
+                <Line type="monotone" dataKey="oil_price" name="Oil Price" stroke="var(--orange)" strokeWidth={1.5} dot={false} activeDot={{ r: 3, fill: 'var(--orange)' }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div style={{
+            flex: 1,
+            background: 'var(--glass)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 'var(--radius)',
+            padding: '10px 6px 4px 0',
+          }}>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+                <XAxis dataKey="date" tick={{ fill: 'var(--text-2)', fontSize: 9, fontFamily: 'var(--mono)' }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
+                <YAxis domain={['auto', 'auto']} tick={{ fill: 'var(--text-2)', fontSize: 9, fontFamily: 'var(--mono)' }} axisLine={false} tickLine={false} width={30} />
+                <Tooltip
+                  contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 10, fontFamily: 'var(--font)', color: 'var(--text-0)', boxShadow: '0 4px 16px rgba(0,0,0,.5)' }}
+                  itemStyle={{ padding: '1px 0' }} labelStyle={{ color: 'var(--text-1)', fontSize: 10, marginBottom: 4 }}
+                />
+                <Legend iconType="circle" iconSize={6} wrapperStyle={{ fontSize: 10, fontFamily: 'var(--font)', color: 'var(--text-1)', paddingTop: 4 }} />
+                <Line type="monotone" dataKey="usd_myr" name="USD/MYR" stroke="var(--cyan)" strokeWidth={1.5} dot={false} activeDot={{ r: 3, fill: 'var(--cyan)' }} />
+                <Line type="monotone" dataKey="local_inflation" name="Inflation" stroke="var(--purple)" strokeWidth={1.5} dot={false} activeDot={{ r: 3, fill: 'var(--purple)' }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
         </div>
       )}
     </div>

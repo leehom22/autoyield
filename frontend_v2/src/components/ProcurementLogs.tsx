@@ -148,8 +148,8 @@ export default function ProcurementLogs() {
                   <td className="truncate" style={{ maxWidth: 120 }}>{log.ingredient_name}</td>
                   <td className="truncate" style={{ maxWidth: 110 }}>{log.supplier_name}</td>
                   <td className="text-right mono">{log.quantity}</td>
-                  <td className="text-right mono">${log.unit_price?.toFixed(2)}</td>
-                  <td className="text-right mono text-cyan">${(log.quantity * log.unit_price).toFixed(2)}</td>
+                  <td className="text-right mono">RM{log.unit_price?.toFixed(2)}</td>
+                  <td className="text-right mono text-cyan">RM{(log.quantity * log.unit_price).toFixed(2)}</td>
                   <td>
                     <span className={`badge ${STATUS_STYLES[log.status] || 'badge-cyan'}`}>
                       {log.status}

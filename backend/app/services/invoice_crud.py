@@ -51,8 +51,8 @@ async def execute_invoice_crud(invoice_data: Dict[str, Any]) -> Dict[str, Any]:
             "supplier_id": supplier_id,
             "qty": qty,
             "unit_cost": unit_cost,
-            "delivery_status": "ordered",
-            "arrival_estimate": None  # Could be calculated from avg_lead_time
+            "delivery_status": "delivered",
+            "arrival_estimate": get_current_simulated_time().isoformat()
         }
         result = supabase.table("procurement_logs").insert(po_record).execute()
         if result.data:
@@ -110,8 +110,9 @@ async def get_or_create_supplier(name: str) -> str:
             result = supabase.table("suppliers").insert(new).execute()
             return result.data[0]["id"]
     
-    # Try to find existing supplier
-    res = supabase.table("suppliers").select("id").eq("name", name).execute()
+    # Try to find existing supplier (buzzy match)
+    core_name = name[:10]
+    res = supabase.table("suppliers").select("id").ilike("name", f"%{core_name}%").execute()
     if res.data:
         return res.data[0]["id"]
     

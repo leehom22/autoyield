@@ -46,3 +46,22 @@ def get_inventory_item(name: str) -> Optional[Dict[str, Any]]:
 def update_inventory_quantity(item_id: str, new_qty: float) -> Dict[str, Any]:
     res = supabase.table("inventory").update({"qty": new_qty}).eq("id", item_id).execute()
     return res.data[0] if res.data else {}
+
+
+# ==========================================
+# 4. Kitchen Operations
+# ==========================================
+def insert_kds_entry(kds_data: Dict[str, Any]) -> Dict[str, Any]:
+    res = supabase.table("kds_queue").insert(kds_data).execute()
+    return res.data[0] if res.data else {}
+
+def complete_order_in_db(order_uuid: str, kds_uuid: str) -> None:
+    if order_uuid:
+        supabase.table("orders") \
+            .delete() \
+            .eq("id", order_uuid).execute()
+            
+    if kds_uuid:
+        supabase.table("kds_queue") \
+            .delete() \
+            .eq("id", kds_uuid).execute()
