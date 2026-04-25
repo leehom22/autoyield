@@ -151,10 +151,4 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     # Start the FastAPI server
-<<<<<<< HEAD
     uvicorn.run(app, host="127.0.0.1", port=8000)
-=======
-    for route in app.routes:
-        print(route.path)
-    uvicorn.run(app, host="127.0.0.1", port=8080)
->>>>>>> David-Frontend
