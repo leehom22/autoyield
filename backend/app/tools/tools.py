@@ -596,20 +596,29 @@ async def generate_post_mortem_learning(params: GeneratePostMortemLearningInput)
     except Exception as e:
         print(f"RPC match_knowledge_base failed (fallback to insert): {e}")
     
-    if similar.data and similar.data[0]["similarity"] > 0.9:
-        best_match = similar.data[0]
-        supabase.table("knowledge_base").update({
-            "lesson_learned": lesson
-        }).eq("id", best_match["id"]).execute()
-        return GeneratePostMortemLearningOutput(lesson_learned=lesson, embedding_id=best_match["id"], strategy_adjustment=strategy, similarity_score=best_match["similarity"])
+    if similar.data:
 
-    supabase.table("knowledge_base").insert({
-        "embedding_vector": embedding, 
-        "scenario_description": lesson, 
-        "lesson_learned": strategy, 
-        "performance_score": 0.85,
-        "created_at": get_current_simulated_time().isoformat()
-    }).execute()
+        sim_val = similar.data[0].get("similarity", 0)
+
+        try:
+            similarity = float(sim_val)
+        except (TypeError, ValueError):
+            similarity = 0.0
+
+        if similarity > 0.9:
+            best_match = similar.data[0]
+            supabase.table("knowledge_base").update({
+                "lesson_learned": lesson
+            }).eq("id", best_match["id"]).execute()
+            return GeneratePostMortemLearningOutput(lesson_learned=lesson, embedding_id=best_match["id"], strategy_adjustment=strategy, similarity_score=best_match["similarity"])
+
+        supabase.table("knowledge_base").insert({
+            "embedding_vector": embedding, 
+            "scenario_description": lesson, 
+            "lesson_learned": strategy, 
+            "performance_score": 0.85,
+            "created_at": get_current_simulated_time().isoformat()
+        }).execute()
     
     return GeneratePostMortemLearningOutput(
         lesson_learned=lesson,
@@ -760,7 +769,15 @@ async def get_menu_pricing_snapshot(
 # ─────────────────────────────────────────────────────────────
 # TOOL 2 — contact_supplier
 # ─────────────────────────────────────────────────────────────
- 
+import re
+
+def _is_uuid(value: str) -> bool:
+    return bool(re.fullmatch(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        value or ""
+    ))
+
+
 @tool
 async def contact_supplier(params: ContactSupplierInput) -> ContactSupplierOutput:
     """
@@ -787,9 +804,19 @@ async def contact_supplier(params: ContactSupplierInput) -> ContactSupplierOutpu
       supplier_contact_logs for manual follow-up by the operator.
     """
     # Fetch supplier info
-    supplier_res = supabase.table("suppliers").select(
+    supplier_key = params.supplier_id
+
+    query = supabase.table("suppliers").select(
         "id, name, avg_lead_time, reliability_score, contact_email, contact_phone"
-    ).eq("id", params.supplier_id).execute()
+    )
+
+    if _is_uuid(supplier_key):
+        supplier_res = query.eq("id", supplier_key).execute()
+    else:
+        # fallback: search by supplier code or name
+        supplier_res = query.or_(
+            f"name.ilike.%{supplier_key}%,supplier_code.eq.{supplier_key}"
+        ).execute()
  
     if not supplier_res.data:
         return ContactSupplierOutput(
@@ -1044,30 +1071,41 @@ _DOWN_KEYWORDS  = ["fall", "falls", "fell", "drop", "decline", "low", "decrease"
  
  
 async def _fetch_news_headline(query: str) -> tuple[str | None, str | None]:
-    """Fetch the top news headline for a query using DuckDuckGo Instant Answer API.
-    Returns (headline_text, source_url). Falls back gracefully on failure.
+    """
+    Fetch the top news headline for a query.
+    Always returns (headline, url), never None.
     """
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.get(
                 "https://api.duckduckgo.com/",
-                params={"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"},
+                params={
+                    "q": query,
+                    "format": "json",
+                    "no_html": "1",
+                    "skip_disambig": "1",
+                },
             )
+
             data = resp.json()
+
             abstract = data.get("AbstractText") or data.get("Answer") or ""
             url = data.get("AbstractURL") or data.get("AbstractSource") or ""
+
             if abstract:
                 return abstract[:300], url
-            # Fall back to related topics
+
             topics = data.get("RelatedTopics", [])
             if topics and isinstance(topics[0], dict):
                 text = topics[0].get("Text", "")
                 link = topics[0].get("FirstURL", "")
-                return (text[:300], link) if text else (None, None)
-    except Exception:
-        pass
+                if text:
+                    return text[:300], link
+
+    except Exception as e:
+        print(f"Macro news fetch failed for query='{query}': {e}")
+
     return None, None
- 
  
 def _extract_trend(text: str) -> str:
     lower = text.lower()
@@ -1128,7 +1166,7 @@ async def query_macro_context(params: QueryMacroContextInput) -> QueryMacroConte
  
     When to call:
     - Before evaluate_supply_chain_options: oil trend affects logistics surcharge multiplier
-    - Before contact_supplier with purchase_order: rising USD/MYR = imported goods more expensive
+    - Before contact_supplier with purchase_order: rising r"usd/myr\s*(?:at|to|=)?\s*(\d+\.\d+)" = imported goods more expensive
     - During Profit Preservation crisis mode: get full picture of all three indicators
     - Proactive: schedule daily at market open (09:00 MYT) to refresh agent's cost model
  
@@ -1150,16 +1188,26 @@ async def query_macro_context(params: QueryMacroContextInput) -> QueryMacroConte
  
     for indicator in params.indicators:
         query_str = _INDICATOR_QUERIES.get(indicator, indicator)
-        headline, url = await _fetch_news_headline(query_str)
- 
-        if headline:
+        result  = await _fetch_news_headline(query_str)
+
+        if not result:
+            headline, url = None, None
+        else:
+            headline, url = result
+        if headline:    
             trend = _extract_trend(headline)
             value = _extract_numeric(headline, indicator)
             confidence = "medium"
             summary = await _glm_summarise(headline, indicator) if params.include_news_summary else None
         else:
             # Graceful fallback — return stable with low confidence
-            trend, value, confidence, summary, url = "stable", None, "low", "No live data retrieved.", None
+            trend, value, confidence, summary, url = (
+                "unknown",
+                None,
+                "low",
+                "No reliable live macro data retrieved.",
+                None
+            )
  
         if trend == "up" and indicator in ("oil_price", "local_inflation"):
             high_risk_count += 1
@@ -1175,13 +1223,16 @@ async def query_macro_context(params: QueryMacroContextInput) -> QueryMacroConte
             source_url=url,
         ))
  
-    # Derive overall risk
-    if high_risk_count >= 2:
-        overall_risk = "high"
-    elif high_risk_count == 1:
-        overall_risk = "elevated"
-    else:
-        overall_risk = "low"
+        unknown_count = sum(1 for r in results if r.trend == "unknown")
+
+        if unknown_count == len(results):
+            overall_risk = "unknown"
+        elif high_risk_count >= 2:
+            overall_risk = "high"
+        elif high_risk_count == 1:
+            overall_risk = "elevated"
+        else:
+            overall_risk = "low"
  
     # Build a concrete agent recommendation
     recommendations = []

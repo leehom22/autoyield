@@ -263,8 +263,8 @@ class GetFestivalCalendarOutput(BaseModel):
 class MacroIndicatorLive(BaseModel):
     indicator: str
     value: Optional[float]       # None if only qualitative data available
-    trend: Literal["up", "down", "stable"]
-    confidence: Literal["high", "medium", "low"]
+    trend: Literal["up", "down", "stable","unknown"]
+    confidence: Literal["high", "medium", "low","unknown"]
     news_summary: Optional[str]  # 1-sentence GLM digest of latest headline
     source_url: Optional[str]    # URL of the article used
  
