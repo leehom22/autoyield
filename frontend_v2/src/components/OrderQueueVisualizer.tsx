@@ -79,10 +79,10 @@ export default function OrderQueueVisualizer({ sseState }: { sseState: any }) {
                 <td className="mono text-2" style={{ fontSize: 10 }}>{new Date(o.timestamp).toLocaleTimeString()}</td>
                 <td className="truncate" style={{ maxWidth: 180, fontSize: 11 }}>{parseItems(o.items)}</td>
                 <td><span className="badge badge-cyan" style={{ fontSize: 9 }}>{o.customer_segment}</span></td>
-                <td className="text-right mono">${(o.total_revenue ?? 0).toFixed(2)}</td>
+                <td className="text-right mono">RM{(o.total_revenue ?? 0).toFixed(2)}</td>
                 <td className="text-right">
                   <span style={{ color: (o.total_margin ?? 0) >= 0 ? 'var(--green)' : 'var(--red)', display: 'inline-flex', alignItems: 'center', gap: 2 }} className="mono">
-                    {(o.total_margin ?? 0) >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}${Math.abs(o.total_margin ?? 0).toFixed(2)}
+                    {(o.total_margin ?? 0) >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}RM{Math.abs(o.total_margin ?? 0).toFixed(2)}
                   </span>
                 </td>
               </tr>
