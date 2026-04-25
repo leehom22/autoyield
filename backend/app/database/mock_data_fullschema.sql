@@ -228,6 +228,13 @@ BEGIN
     WHERE random() < 0.4
     LIMIT 25;
 
+    -- 3.16 Buffer Zone
+    -- Initial inventory ensured to be 3 times of min stock level
+    UPDATE inventory SET qty = min_stock_level * 3.0 WHERE qty < min_stock_level * 3.0;
+    
+    -- min stock level 10
+    -- UPDATE inventory SET min_stock_level = 7 WHERE min_stock_level < 7;
+
     -- 4. Re‑enable FK checks
     -- SET session_replication_role = default;
 

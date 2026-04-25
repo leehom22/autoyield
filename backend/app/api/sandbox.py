@@ -61,20 +61,25 @@ async def trigger_crisis(payload: GodModePayload):
     # 1. Inventory Adjustment
     if qty_mult != 1.0 or cost_mult != 1.0:
         if payload.inventory_target_id:
-            result = supabase.table("inventory").select("qty, unit_cost").eq("id", payload.inventory_target_id).execute()
+            result = supabase.table("inventory").select("id, qty, unit_cost, min_stock_level").eq("id", payload.inventory_target_id).execute()
             items_to_update = result.data if result.data else []
         else:
-            items_to_update = supabase.table("inventory").select("id, qty, unit_cost").execute().data
+            items_to_update = supabase.table("inventory").select("id, qty, unit_cost, min_stock_level").execute().data
 
         for item in items_to_update:
             updates = {}
             if qty_mult != 1.0:
-                # Avoid zero
-                base_qty = max(1.0, float(item["qty"]))
-                updates["qty"] = max(1.0, base_qty * qty_mult)
+                if qty_mult > 1.0:
+                    # Boost based on the min stock level
+                    target_qty = float(item["min_stock_level"]) * qty_mult
+                    # Boost only when the stock lower than target qty
+                    if float(item["qty"]) < target_qty:
+                        updates["qty"] = target_qty
+                else:
+                    # Crash: Not lower than 1.0
+                    updates["qty"] = max(1.0, float(item["qty"]) * qty_mult)
                 
             if cost_mult != 1.0:
-                # Base cost avoid free of cost
                 base_cost = max(0.1, float(item["unit_cost"]))
                 updates["unit_cost"] = base_cost * cost_mult
                 
