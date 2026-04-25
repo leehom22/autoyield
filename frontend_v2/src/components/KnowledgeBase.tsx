@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { BookOpen, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
-import { MOCK_KNOWLEDGE_BASE } from '../lib/mockData';
+//import { MOCK_KNOWLEDGE_BASE } from '../lib/mockData';
 
 interface KnowledgeRecord {
   id: string;
@@ -49,17 +49,8 @@ export default function KnowledgeBase() {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('knowledge_base')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (data && data.length > 0) {
-      setRecords(data);
-    } else {
-      setRecords(MOCK_KNOWLEDGE_BASE);
-    }
+    const { data } = await supabase.from('knowledge_base').select('*').order('created_at', { ascending: false }).limit(10);
+    setRecords(data || []);
     setLoading(false);
   };
 

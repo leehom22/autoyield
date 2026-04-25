@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Flame, Clock, AlertTriangle, Pause, ChefHat, MessageSquare } from 'lucide-react';
-import { MOCK_KDS_QUEUE } from '../lib/mockData';
+//import { MOCK_KDS_QUEUE } from '../lib/mockData';
 
 interface KdsOrder {
   id: string;
@@ -12,7 +12,7 @@ interface KdsOrder {
   priority: 'urgent' | 'normal' | 'hold';
   status: string;
   position_in_queue: number;
-  eta_minutes?: number | null;
+  eta_timestamp?: string | null; 
   agent_note?: string | null;
   created_at: string;
 }
@@ -61,10 +61,11 @@ export default function KdsQueue() {
         items: typeof d.items === 'string' ? JSON.parse(d.items) : (d.items || []),
       })));
     } else {
-      setQueue(MOCK_KDS_QUEUE);
+      setQueue([]);
     }
     setLoading(false);
   };
+
 
   const urgentCount = queue.filter((o) => o.priority === 'urgent').length;
 
@@ -106,6 +107,9 @@ export default function KdsQueue() {
             {queue.map((order) => {
               const ps = PRIORITY_STYLES[order.priority] || PRIORITY_STYLES.normal;
               const PIcon = ps.icon;
+              const etaMinutes = order.eta_timestamp
+                ? Math.max(0, Math.floor((new Date(order.eta_timestamp).getTime() - Date.now()) / 60000))
+                : null;
               return (
                 <div
                   key={order.id}
@@ -152,9 +156,9 @@ export default function KdsQueue() {
 
                   {/* Footer - ETA */}
                   <div className="row" style={{ justifyContent: 'space-between', marginTop: 'auto', paddingTop: 4, borderTop: '1px solid var(--border-subtle)' }}>
-                    {order.eta_minutes != null && (
+                    {order.eta_timestamp && etaMinutes !== null && (
                       <span className="row gap-4 text-2" style={{ fontSize: 10 }}>
-                        <Clock size={9} /> ETA: <span className="mono text-0">{order.eta_minutes}m</span>
+                        <Clock size={9} /> ETA: <span className="mono text-0">{etaMinutes}m</span>
                       </span>
                     )}
                     {order.agent_note && (

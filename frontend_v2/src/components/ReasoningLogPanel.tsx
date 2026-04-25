@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { MOCK_DECISIONS } from '../lib/mockData';
+//import { MOCK_DECISIONS } from '../lib/mockData';
 import { ChevronDown, ChevronRight, Brain } from 'lucide-react';
 
 export default function ReasoningLogPanel() {
-  const [logs, setLogs] = useState<any[]>(MOCK_DECISIONS);
+  const [logs, setLogs] = useState<any[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 

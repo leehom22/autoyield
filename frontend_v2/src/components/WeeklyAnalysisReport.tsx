@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { MOCK_WEEKLY_REPORT } from '../lib/mockData';
+//import { MOCK_WEEKLY_REPORT } from '../lib/mockData';
 
 export default function WeeklyAnalysisReport() {
-  const [report, setReport] = useState<any>(MOCK_WEEKLY_REPORT);
+  const [report, setReport] = useState<any>(null);
 
   useEffect(() => {
     supabase.from('decision_logs').select('*').eq('trigger_signal', 'WEEKLY_FORECAST').order('timestamp', { ascending: false }).limit(1)

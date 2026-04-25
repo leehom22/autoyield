@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { MOCK_INVENTORY, MOCK_MENU, MOCK_SUPPLIERS, MOCK_STAFF } from '../lib/mockData';
+//import { MOCK_INVENTORY, MOCK_MENU, MOCK_SUPPLIERS, MOCK_STAFF } from '../lib/mockData';
 import { AlertTriangle, Package, UtensilsCrossed, Truck, Users, MessageCircle } from 'lucide-react';
 import MacroTrendsChart from './MacroTrendsChart';
 import ProcurementLogs from './ProcurementLogs';
@@ -9,10 +9,10 @@ import KnowledgeBase from './KnowledgeBase';
 import SupplierContactLogsModal from './SupplierContactLogsModal';
 
 export default function BusinessDashboard() {
-  const [inv, setInv] = useState<any[]>(MOCK_INVENTORY);
-  const [menu, setMenu] = useState<any[]>(MOCK_MENU);
-  const [supp, setSupp] = useState<any[]>(MOCK_SUPPLIERS);
-  const [staff, setStaff] = useState<any[]>(MOCK_STAFF);
+  const [inv, setInv] = useState<any[]>([]);
+  const [menu, setMenu] = useState<any[]>([]);
+  const [supp, setSupp] = useState<any[]>([]);
+  const [staff, setStaff] = useState<any[]>([]);
   const [tab, setTab] = useState<'inv' | 'menu' | 'supp' | 'staff'>('inv');
   const [contactModal, setContactModal] = useState<{ id: string; name: string } | null>(null);
 
@@ -26,10 +26,10 @@ export default function BusinessDashboard() {
     fi(); fm(); fs(); ft();
     return () => { s.forEach((x) => supabase.removeChannel(x)); };
   }, []);
-  const fi = async () => { const { data } = await supabase.from('inventory').select('*'); if (data?.length) setInv(data); };
-  const fm = async () => { const { data } = await supabase.from('menu_items').select('*'); if (data?.length) setMenu(data); };
-  const fs = async () => { const { data } = await supabase.from('suppliers').select('*'); if (data?.length) setSupp(data); };
-  const ft = async () => { const { data } = await supabase.from('staff_roster').select('*'); if (data?.length) setStaff(data); };
+  const fi = async () => { const { data } = await supabase.from('inventory').select('*'); if (data) setInv(data); };
+  const fm = async () => { const { data } = await supabase.from('menu_items').select('*'); if (data) setMenu(data); };
+  const fs = async () => { const { data } = await supabase.from('suppliers').select('*'); if (data) setSupp(data); };
+  const ft = async () => { const { data } = await supabase.from('staff_roster').select('*'); if (data) setStaff(data); };
 
   const dte = (ts: string | null) => { if (!ts) return null; return Math.max(0, Math.floor((new Date(ts).getTime() - Date.now()) / 86400000)); };
   const lowStockCount = inv.filter((i) => i.qty <= (i.min_stock_level ?? 0)).length;

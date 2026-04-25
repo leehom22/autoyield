@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { generateMockOrder } from '../lib/mockData';
+//import { generateMockOrder } from '../lib/mockData';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 interface Order { id: string; items: any; total_revenue: number; total_margin: number; timestamp: string; customer_segment: string; }
@@ -10,24 +10,38 @@ export default function OrderQueueVisualizer({ sseState }: { sseState: any }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hasSub, setHasSub] = useState(false);
 
+  // useEffect(() => {
+  //   const sub = supabase.channel('orders_rt3').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (p) => {
+  //     setHasSub(true);
+  //     setOrders((prev) => [p.new as Order, ...prev].slice(0, 30));
+  //   }).subscribe();
+  //   return () => { supabase.removeChannel(sub); };
+  // }, []);
+
   useEffect(() => {
-    const sub = supabase.channel('orders_rt3').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (p) => {
+  // Initial loads recent 30 orders
+  supabase.from('orders').select('*').order('timestamp', { ascending: false }).limit(30)
+    .then(({ data }) => { if (data) setOrders(data); });
+
+  const sub = supabase.channel('orders_rt3')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (p) => {
       setHasSub(true);
       setOrders((prev) => [p.new as Order, ...prev].slice(0, 30));
-    }).subscribe();
-    return () => { supabase.removeChannel(sub); };
-  }, []);
+    })
+    .subscribe();
+  return () => { supabase.removeChannel(sub); };
+}, []);
 
   // Mock order generator when no real data
-  useEffect(() => {
-    if (hasSub) return;
-    // Seed some initial orders
-    setOrders(Array.from({ length: 8 }, () => generateMockOrder()).reverse());
-    const iv = setInterval(() => {
-      setOrders((prev) => [generateMockOrder(), ...prev].slice(0, 30));
-    }, 3000);
-    return () => clearInterval(iv);
-  }, [hasSub]);
+  // useEffect(() => {
+  //   if (hasSub) return;
+  //   // Seed some initial orders
+  //   setOrders(Array.from({ length: 8 }, () => generateMockOrder()).reverse());
+  //   const iv = setInterval(() => {
+  //     setOrders((prev) => [generateMockOrder(), ...prev].slice(0, 30));
+  //   }, 3000);
+  //   return () => clearInterval(iv);
+  // }, [hasSub]);
 
   useEffect(() => { if (containerRef.current) containerRef.current.scrollTop = 0; }, [orders.length]);
 

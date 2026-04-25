@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { TrendingUp, BarChart3 } from 'lucide-react';
-import { MOCK_MARKET_TRENDS } from '../lib/mockData';
+//import { MOCK_MARKET_TRENDS } from '../lib/mockData';
 
 interface TrendRecord {
   indicator: string;
@@ -20,16 +20,8 @@ export default function MacroTrendsChart() {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('market_trends_history')
-      .select('indicator, value, recorded_at')
-      .order('recorded_at', { ascending: true })
-      .limit(30);
-    if (data && data.length > 0) {
-      setRaw(data);
-    } else {
-      setRaw(MOCK_MARKET_TRENDS);
-    }
+    const { data } = await supabase.from('market_trends_history').select('indicator, value, recorded_at').order('recorded_at', { ascending: true }).limit(30);
+    setRaw(data || []);
     setLoading(false);
   };
 

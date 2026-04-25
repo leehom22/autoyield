@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { ClipboardList, Plus, Truck } from 'lucide-react';
-import { MOCK_PROCUREMENT_LOGS } from '../lib/mockData';
+//import { MOCK_PROCUREMENT_LOGS } from '../lib/mockData';
 
 interface ProcurementLog {
   id: string;
@@ -70,13 +70,21 @@ export default function ProcurementLogs() {
       .limit(20);
 
     if (data && data.length > 0) {
-      setLogs(data.map((d: any) => ({
-        ...d,
-        ingredient_name: d.inventory?.name || d.ingredient_name || '—',
-        supplier_name: d.suppliers?.name || d.supplier_name || '—',
-      })));
+      const mappedLogs: ProcurementLog[] = data.map((item: any) => ({
+        id: item.id,
+        quantity: item.qty,
+        unit_price: item.unit_cost,
+        status: item.delivery_status,
+        estimated_arrival: item.arrival_estimate,
+        created_at: item.created_at,
+        ingredient_name: item.inventory?.name,
+        supplier_name: item.suppliers?.name,
+        inventory: item.inventory,
+        suppliers: item.suppliers,
+      }));
+      setLogs(mappedLogs);
     } else {
-      setLogs(MOCK_PROCUREMENT_LOGS);
+      setLogs([]);
     }
     setLoading(false);
   };

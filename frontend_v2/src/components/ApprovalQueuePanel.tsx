@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { approveNotification } from '../lib/api';
 import { useToastStore } from '../store/toastStore';
-import { MOCK_NOTIFICATIONS } from '../lib/mockData';
+//import { MOCK_NOTIFICATIONS } from '../lib/mockData';
 import { Check, X, ChevronDown, ChevronRight, Bell } from 'lucide-react';
 
 export default function ApprovalQueuePanel() {
-  const [notifs, setNotifs] = useState<any[]>(MOCK_NOTIFICATIONS);
+  const [notifs, setNotifs] = useState<any[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [noteFor, setNoteFor] = useState<string | null>(null);

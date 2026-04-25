@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { X, MessageCircle, Phone, Mail } from 'lucide-react';
-import { MOCK_SUPPLIER_CONTACT_LOGS } from '../lib/mockData';
+//import { MOCK_SUPPLIER_CONTACT_LOGS } from '../lib/mockData';
 
 interface ContactLog {
   id: string;
   supplier_id: string;
   created_at: string;
   message_type: string;
-  message_preview: string;
+  message_body: string; 
   quantity?: number | null;
   unit_price?: number | null;
   channel: string;
@@ -75,11 +75,7 @@ export default function SupplierContactLogsModal({ supplierId, supplierName, onC
       .order('created_at', { ascending: false })
       .limit(20);
 
-    if (data && data.length > 0) {
-      setLogs(data);
-    } else {
-      setLogs(MOCK_SUPPLIER_CONTACT_LOGS.filter((l) => l.supplier_id === supplierId));
-    }
+    setLogs(data || []);
     setLoading(false);
   };
 
@@ -187,7 +183,9 @@ export default function SupplierContactLogsModal({ supplierId, supplierName, onC
                           {log.message_type?.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="truncate" style={{ maxWidth: 180, fontSize: 11 }}>{log.message_preview}</td>
+                      <td className="truncate" style={{ maxWidth: 180, fontSize: 11 }}>
+                        {log.message_body?.substring(0, 80)}...
+                      </td>
                       <td className="text-right mono">{log.quantity ?? '—'}</td>
                       <td className="text-right mono">{log.unit_price != null ? `$${log.unit_price.toFixed(2)}` : '—'}</td>
                       <td>

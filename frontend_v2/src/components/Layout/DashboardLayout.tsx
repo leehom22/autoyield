@@ -7,7 +7,7 @@ import ReasoningLogPanel from '../ReasoningLogPanel';
 import ApprovalQueuePanel from '../ApprovalQueuePanel';
 import ErrorLogPanel from '../ErrorLogPanel';
 import HumanAuthorizationPanel from '../HumanAuthorizationPanel';
-import { MOCK_SSE_STATE } from '../../lib/mockData';
+//import { MOCK_SSE_STATE } from '../../lib/mockData';
 
 export type Tab = 'sandbox' | 'operations' | 'agent-io' | 'report';
 
@@ -18,7 +18,7 @@ export default function DashboardLayout() {
   const [termOpen, setTermOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(true);
   const [authOpen, setAuthOpen] = useState(false);
-  const [sseState, setSseState] = useState<any>(MOCK_SSE_STATE);
+  const [sseState, setSseState] = useState<any>({ simulated_time: null, is_paused: false, queue_length: 0, velocity: 1 });;
   const [connected, setConnected] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
