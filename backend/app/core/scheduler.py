@@ -3,23 +3,17 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from langchain_core.messages import HumanMessage
 from app.core.supabase import supabase
 from app.engine.simulator import get_current_simulated_time
+from app.graph.forecast_graph import get_forecast_graph
 
 scheduler = AsyncIOScheduler()
+
+graph = get_forecast_graph()
 
 async def weekly_forecast(graph):
     result = await graph.ainvoke({
         "messages": [HumanMessage(content="Weekly procurement report analysis required. Review last 7 days of purchases. Provide summary and recommendations.")]
     })
-    final_response = result.get("final_response", "")
-    supabase.table("decision_logs").insert({
-        "trigger_signal": "WEEKLY_FORECAST",
-        "timestamp": get_current_simulated_time().isoformat(),
-        "p_agent_argument": result.get("p_agent_position", ""),
-        "r_agent_argument": result.get("r_agent_position", ""),
-        "resolution": "Report generated",
-        "action_taken": final_response[:500],
-    }).execute()
-
+ 
 def start_scheduler(graph):
     scheduler.add_job(
         lambda: asyncio.run(weekly_forecast(graph)),

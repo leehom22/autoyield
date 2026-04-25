@@ -66,7 +66,7 @@ async def _call_proactive_agent(app, crisis_msg: str):
             "action_taken": result.get("final_response", "")[:500],
         }).execute()
 
-        print(f"✅ Proactive agent completed: {result.get('final_response', '')[:100]}...")
+        print(f"Proactive agent completed: {result.get('final_response', '')[:100]}...")
 
     except Exception as e:
         print(f"❌ Proactive agent failed: {e}")
@@ -112,10 +112,10 @@ async def _call_forecast_agent(app, crisis_msg: str):
             "action_taken": result.get("forecast_result", "")[:500],
         }).execute()
 
-        print(f"✅ Forecast agent completed: {result.get('forecast_result', '')[:100]}...")
+        print(f" Forecast agent completed: {result.get('forecast_result', '')[:100]}...")
 
     except Exception as e:
-        print(f"❌ Forecast agent failed: {e}")
+        print(f" Forecast agent failed: {e}")
 
 
 async def check_and_trigger_crisis(app):

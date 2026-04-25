@@ -36,7 +36,7 @@ async def export_all():
     with open("db_export.json", "w", encoding="utf-8") as f:
         json.dump(export, f, indent=2, default=str)
     
-    print(f"\n✅ Export complete: db_export.json ({len(export)} tables)")
+    print(f"\nExport complete: db_export.json ({len(export)} tables)")
 
 if __name__ == "__main__":
     asyncio.run(export_all())

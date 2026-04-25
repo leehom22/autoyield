@@ -36,7 +36,7 @@ def test_glm_connection():
     try:
         # A simple, low-token request to verify the key
         response = llm.invoke("Hi")
-        print("✅ API Key is active!")
+        print(" API Key is active!")
         print(f"Response: {response.content}")
         return True
     except AuthenticationError:

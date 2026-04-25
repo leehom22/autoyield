@@ -114,7 +114,7 @@ export const MOCK_WEEKLY_REPORT = {
     "* **Net Margin:** 61.2% (Target: 60.0%)\n" +
     "* **Top Performer:** *Seabass Aglio Olio* (215 orders)\n" +
     "* **Critical Risk:** *Atlantic Salmon* stock level at 2.5 days buffer.\n\n" +
-    "### ✅ Key Actions Executed\n\n" +
+    "### Key Actions Executed\n\n" +
     "1. **Dynamic Pricing:** Adjusted *Grilled Salmon* price from RM42.00 to RM45.00 (+7%) to track unit cost surge.\n" +
     "2. **Procurement Lock:** Finalized emergency PO for 40kg *Sea Bass Whole* at RM22.11/unit.\n" +
     "3. **Ops Optimization:** Reassigned 2 staff from 'Bartender' to 'Line Cook' during Friday peak (19:00-21:00) to resolve prep bottlenecks.\n" +
