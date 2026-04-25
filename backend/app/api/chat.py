@@ -24,7 +24,7 @@ class ChatResponse(BaseModel):
 async def chat(req: ChatRequest):
     session_id = req.session_id or f"sess_{uuid.uuid4().hex[:8]}"
     config = {"configurable": {"thread_id": session_id}}
-    graph = get_graph()  # Maybe need to retrieve from app.state, but call function to get instant object here
+    graph = get_graph()  
     
     try:
         input_data = {"messages": [HumanMessage(content=req.message)]}

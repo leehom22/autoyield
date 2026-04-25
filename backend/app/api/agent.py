@@ -10,6 +10,7 @@ from app.services.invoice_extractor import extract_invoice_data
 from app.services.db_service import get_inventory_status
 from app.core.config import settings
 from app.engine.simulator import get_current_simulated_time
+from app.graph.assistant_graph import get_graph
 
 MAX_FILE_SIZE = 5 * 1024 * 1024   # Maximum 5MB file input
 
@@ -27,15 +28,14 @@ async def upload_invoice(
         raise HTTPException(status_code=413, detail=f"File too large. Max {MAX_FILE_SIZE // (1024*1024)}MB")
     
     app = request.app
-    graph = app.state.graph
+    graph = get_graph()
     
     # Read and Parse Invoice Image
-    contents = await file.read()
     b64 = base64.b64encode(contents).decode()
     image_url = f"data:{file.content_type};base64,{b64}"
-    
+    print(f"Invoice received: {file.filename}, type={file.content_type}, size={len(contents)} bytes")
     # Retrieve data from OCR Extraction Service
-    invoice_data = await extract_invoice_data(image_url)
+    invoice_data = await extract_invoice_data(contents, file.content_type)
     
     # Check for missing fields
     missing = []
@@ -61,29 +61,43 @@ async def upload_invoice(
     spike_detected = False
     spike_items = []
     for item in invoice_data["items"]:
-        inv_item = next((i for i in inv_items if i["name"].lower() == item["name"].lower()), None)
+        import re
+        def norm(s: str) -> str:
+            return re.sub(r"[^a-z0-9 ]", "", (s or "").lower()).strip()
+
+        inv_item = next(
+            (i for i in inv_items if norm(i["name"]) == norm(item["name"])),
+            None
+        )
         if inv_item and item["unit_price"] > inv_item["unit_cost"] * settings.PRICE_SPIKE_THRESHOLD:
             spike_detected = True
             spike_items.append(item["name"])
     
     if spike_detected:
         # Call P/R Agent Graph for debate
-        graph = app.state.graph
+        # ** Connect to assistant.py
+        trigger_prompt = f"""
+        TRIGGER: INVOICE_PRICE_SPIKE
+        SOURCE: upload_invoice
+        SUPPLIER: {invoice_data.get("supplier")}
+        SPIKE_ITEMS: {spike_items}
+        INVOICE_DATA: {invoice_data}
+
+        Task:
+        Analyze the invoice price spike
+        """
+        print("⚠ Price spike detected, triggering debating agents")
         result = await graph.ainvoke({
-            "messages": [HumanMessage(content=f"Invoice price spike detected on items: {spike_items}. P-Agent and R-Agent debate required.")]
-        })
-        final_response = result.get("final_response", "")
-        # Record debate outcome in DB
-        from app.core.supabase import supabase
-        supabase.table("decision_logs").insert({
+            "messages": [HumanMessage(content=trigger_prompt)],
+            "invoice_data": invoice_data,
             "trigger_signal": "INVOICE_PRICE_SPIKE",
-            "timestamp": get_current_simulated_time().isoformat(),
-            "p_agent_argument": result.get("p_agent_position", ""),
-            "r_agent_argument": result.get("r_agent_position", ""),
-            "resolution": "Debate completed",
-            "action_taken": final_response[:500],
-        }).execute()
-        return {"status": "debate_triggered", "response": final_response}
+            "should_persist_decision": True,
+        })
+        return {
+            "status": "debate_triggered",
+            "response": result.get("final_response", ""),
+            "decision_saved": result.get("decision_saved", False),
+        }
     else:
         # Store into DB
         from app.services.invoice_crud import execute_invoice_crud
