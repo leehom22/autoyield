@@ -60,18 +60,25 @@ async def upload_invoice(
     inv_items = get_inventory_status()
     spike_detected = False
     spike_items = []
-    for item in invoice_data["items"]:
-        import re
-        def norm(s: str) -> str:
-            return re.sub(r"[^a-z0-9 ]", "", (s or "").lower()).strip()
+    import re
+    def norm(s: str) -> str:
+        return re.sub(r"[^a-z0-9 ]", "", (s or "").lower()).strip()
 
+    for item in invoice_data.get("items", []):
         inv_item = next(
             (i for i in inv_items if norm(i["name"]) == norm(item["name"])),
             None
         )
-        if inv_item and item["unit_price"] > inv_item["unit_cost"] * settings.PRICE_SPIKE_THRESHOLD:
-            spike_detected = True
-            spike_items.append(item["name"])
+        if inv_item:
+            # Ensure base_cost is a float data
+            base_cost = float(inv_item.get("unit_cost") or 0.0)
+            
+            if base_cost > 0.0:
+                if item["unit_price"] > base_cost * settings.PRICE_SPIKE_THRESHOLD:
+                    spike_detected = True
+                    spike_items.append(item["name"])
+            else:
+                print(f"Warning: Item {item['name']} has 0.0 base cost in DB. Skipping spike check.")
     
     if spike_detected:
         # Call P/R Agent Graph for debate

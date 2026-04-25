@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from app.core.state import SYSTEM_STATE
 from app.services.order_service import generate_random_order
-from app.services.db_service import get_active_menu, insert_mock_order, get_inventory_item, update_inventory_quantity
+from app.services.db_service import get_active_menu, insert_mock_order, get_inventory_item, update_inventory_quantity, complete_order_in_db, insert_kds_entry
 from app.core.config import settings
 import random
 import logging
@@ -82,14 +82,46 @@ class WorldSimulationEngine:
                     new_qty
                 )
 
-    async def _async_db_insert(self, data):
+    async def _async_db_complete(self, order_data: dict):
         try:
-            # Insert order
-            await asyncio.to_thread(insert_mock_order, data)
-            # Consume inventory
-            await self._consume_inventory_for_order(data)
+            order_id = order_data.get("id")
+            kds_id = order_data.get("kds_id")
+            await asyncio.to_thread(complete_order_in_db, order_id, kds_id)
         except Exception as e:
-            logger.error(f"[DB Error] Failed to process order: {e}")
+            logger.error(f"[DB Error] Failed to complete order: {e}")
+
+    async def _async_db_insert(self, order_data: dict):
+        try:
+            # 1. Insert Order
+            await asyncio.to_thread(insert_mock_order, order_data)
+            
+            # 2. Insert KDS
+            import uuid
+            kds_id = str(uuid.uuid4())
+            order_data["kds_uuid"] = kds_id
+            
+            # ETA (Simulate 15 minutes)
+            prep_minutes = int(10 + (len(self.active_order_queue)/2))
+            eta = (self.simulated_time + timedelta(minutes=prep_minutes)).isoformat()
+
+            kds_payload = {
+                "id": kds_id,
+                "kds_entry_id": f"kds_{order_data['id'][:8]}",
+                "order_id": order_data["id"][-6:], 
+                "items": order_data["items"],
+                "priority": "normal",
+                "status": "displayed",
+                "estimated_prep_minutes": prep_minutes,
+                "position_in_queue": len(self.active_order_queue),
+                "eta_timestamp": eta,
+                "created_at": order_data["timestamp"]
+            }
+            await asyncio.to_thread(insert_kds_entry, kds_payload)
+
+            # 3. Consumption
+            await self._consume_inventory_for_order(order_data)
+        except Exception as e:
+            logger.error(f"[DB Error] {e}")
 
     async def broadcast_state(self):
         # Broadcast Payload Structure for frontend SSE consumption

@@ -1,6 +1,7 @@
 import random
 from datetime import datetime
 from app.services.db_service import get_active_menu, insert_mock_order
+import uuid
 
 # Generate a random order based on the active menu with 1-3 items, revenue, margin and customer segment
 
@@ -34,12 +35,16 @@ def generate_random_order(simulated_time: datetime):
     segments = ['Regular', 'VIP', 'New', 'ChurnRisk']
     segment_weights = [0.6, 0.1, 0.2, 0.1]
     
+    order_id = str(uuid.uuid4())
+    
     order_data = {
+        "id": order_id,
         "items": order_items,
         "total_revenue": round(total_revenue, 2),
         "total_margin": round(total_margin, 2),
         "timestamp": simulated_time.isoformat(),
-        "customer_segment": random.choices(segments, weights=segment_weights)[0]
+        "customer_segment": random.choices(segments, weights=segment_weights)[0],
+        "order_status": "pending"
     }
 
     return order_data
