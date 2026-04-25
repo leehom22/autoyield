@@ -102,3 +102,54 @@ export const MOCK_SSE_STATE = {
   is_paused: false,
   simulated_time: new Date(2026, 3, 25, 14, 35, 0).toISOString(),
 };
+
+/* ── Macro Trends (P0) ── */
+export const MOCK_MARKET_TRENDS = (() => {
+  const records: { indicator: string; value: number; recorded_at: string }[] = [];
+  for (let i = 29; i >= 0; i--) {
+    const date = d(i);
+    records.push({ indicator: 'oil_price', value: +(72 + Math.sin(i * 0.4) * 8 + Math.random() * 3).toFixed(2), recorded_at: date });
+    records.push({ indicator: 'usd_myr', value: +(4.45 + Math.sin(i * 0.3) * 0.12 + Math.random() * 0.05).toFixed(4), recorded_at: date });
+    records.push({ indicator: 'local_inflation', value: +(2.8 + Math.cos(i * 0.25) * 0.6 + Math.random() * 0.2).toFixed(2), recorded_at: date });
+  }
+  return records;
+})();
+
+/* ── Procurement Logs (P1) ── */
+export const MOCK_PROCUREMENT_LOGS = [
+  { id: 'pl1', ingredient_name: 'Chicken Breast', supplier_name: 'Farm Fresh Sdn Bhd', quantity: 50, unit_price: 8.50, status: 'delivered', estimated_arrival: d(-1), created_at: d(0.1) },
+  { id: 'pl2', ingredient_name: 'Coconut Milk', supplier_name: 'Seri Murni Trading', quantity: 30, unit_price: 4.80, status: 'shipped', estimated_arrival: future(1), created_at: d(0.2) },
+  { id: 'pl3', ingredient_name: 'Fresh Prawns', supplier_name: 'Ocean Harvest Seafood', quantity: 20, unit_price: 28.00, status: 'ordered', estimated_arrival: future(2), created_at: d(0.5) },
+  { id: 'pl4', ingredient_name: 'Palm Cooking Oil', supplier_name: 'KL Dry Goods Wholesale', quantity: 10, unit_price: 14.20, status: 'pending', estimated_arrival: future(3), created_at: d(1) },
+  { id: 'pl5', ingredient_name: 'Dried Anchovies', supplier_name: 'KL Dry Goods Wholesale', quantity: 15, unit_price: 18.00, status: 'cancelled', estimated_arrival: null, created_at: d(2) },
+];
+
+/* ── KDS Queue (P1) ── */
+export const MOCK_KDS_QUEUE = [
+  { id: 'kds1', order_id: 'ORD-201', table_number: '5', source: 'dine-in', items: [{ name: 'Nasi Lemak Special', quantity: 2 }, { name: 'Teh Tarik', quantity: 2 }], priority: 'urgent' as const, status: 'cooking', position_in_queue: 1, eta_minutes: 8, agent_note: 'VIP customer — prioritize quality', created_at: d(0) },
+  { id: 'kds2', order_id: 'ORD-202', table_number: '12', source: 'dine-in', items: [{ name: 'Char Kuey Teow', quantity: 1 }, { name: 'Milo Ais', quantity: 1 }], priority: 'normal' as const, status: 'preparing', position_in_queue: 2, eta_minutes: 12, agent_note: null, created_at: d(0) },
+  { id: 'kds3', order_id: 'ORD-203', table_number: null, source: 'grab', items: [{ name: 'Laksa Penang', quantity: 1 }, { name: 'Roti Canai', quantity: 3 }], priority: 'normal' as const, status: 'queued', position_in_queue: 3, eta_minutes: 18, agent_note: null, created_at: d(0) },
+  { id: 'kds4', order_id: 'ORD-204', table_number: '3', source: 'dine-in', items: [{ name: 'Nasi Goreng Kampung', quantity: 2 }, { name: 'Ayam Goreng Berempah', quantity: 1 }, { name: 'Teh Tarik', quantity: 3 }], priority: 'normal' as const, status: 'queued', position_in_queue: 4, eta_minutes: 22, agent_note: 'Customer requested extra spicy', created_at: d(0) },
+  { id: 'kds5', order_id: 'ORD-205', table_number: '8', source: 'walk-in', items: [{ name: 'Roti Canai', quantity: 1 }], priority: 'hold' as const, status: 'hold', position_in_queue: 5, eta_minutes: null, agent_note: 'Waiting for missing ingredient delivery', created_at: d(0) },
+];
+
+/* ── Knowledge Base (P2) ── */
+export const MOCK_KNOWLEDGE_BASE = [
+  { id: 'kb1', scenario_description: 'Cooking oil price spike of 18% triggered automatic menu price adjustment. Agent raised fried item prices by 6% instead of proposed 8%.', lesson_learned: 'Moderate price increases (5-7%) maintain customer retention better than aggressive adjustments. Combined with portion optimization, margin impact was minimized. Customer complaints remained below threshold.', performance_score: 0.87, created_at: d(0.5) },
+  { id: 'kb2', scenario_description: 'Roti Canai demand surge (+35%) during weekend. Combo deal created instead of price increase to preserve loss-leader strategy.', lesson_learned: 'Loss-leader items with high attach rates (>70% beverage pairing) should not have price increases. Combo deals convert 34% of customers and increase average ticket by RM2.40.', performance_score: 0.93, created_at: d(1) },
+  { id: 'kb3', scenario_description: 'Staff overload detected: prep cook at 90% capacity. Tasks reassigned to sous chef with 72% load.', lesson_learned: 'Cross-training staff enables dynamic load balancing without additional hiring costs. Quality scores maintained at 4.2/5 post-reassignment. Optimal load threshold is 80% — trigger alerts above this.', performance_score: 0.78, created_at: d(2) },
+  { id: 'kb4', scenario_description: 'Supplier reliability drop: Ocean Harvest Seafood delivery delayed by 6 hours, impacting prawn-based menu items.', lesson_learned: 'Maintain backup supplier contracts for critical ingredients. Automatic menu item hiding when stock reaches 2-day buffer prevents customer disappointment. Revenue impact: -RM180 for 1 day.', performance_score: 0.62, created_at: d(4) },
+  { id: 'kb5', scenario_description: 'Weekend peak hour analysis revealed beverage prep bottleneck between 12:00-13:00 causing 4-minute average delay.', lesson_learned: 'Pre-batching Teh Tarik base during 11:30-12:00 reduced beverage prep time by 40%. Customer wait time decreased from 12min to 8min average. Implement pre-batch protocol for top 3 beverages.', performance_score: 0.85, created_at: d(7) },
+];
+
+/* ── Supplier Contact Logs (P2) ── */
+export const MOCK_SUPPLIER_CONTACT_LOGS = [
+  { id: 'scl1', supplier_id: 's1', created_at: d(0.1), message_type: 'order', message_preview: 'PO #1249 — 50kg chicken breast at RM8.50/kg. Delivery by tomorrow 6AM.', quantity: 50, unit_price: 8.50, channel: 'whatsapp', status: 'sent' },
+  { id: 'scl2', supplier_id: 's1', created_at: d(0.3), message_type: 'negotiation', message_preview: 'Requesting 5% volume discount for 30-day contract commitment.', quantity: null, unit_price: null, channel: 'whatsapp', status: 'received' },
+  { id: 'scl3', supplier_id: 's1', created_at: d(1), message_type: 'inquiry', message_preview: 'Checking availability of organic free-range chicken. MOQ?', quantity: null, unit_price: null, channel: 'email', status: 'read' },
+  { id: 'scl4', supplier_id: 's1', created_at: d(3), message_type: 'quote', message_preview: 'Updated price list for Q2 2026. Chicken +3%, Eggs stable.', quantity: null, unit_price: null, channel: 'email', status: 'received' },
+  { id: 'scl5', supplier_id: 's2', created_at: d(0.2), message_type: 'order', message_preview: 'PO #1248 — 20 units coconut milk at RM4.20/unit.', quantity: 20, unit_price: 4.20, channel: 'whatsapp', status: 'sent' },
+  { id: 'scl6', supplier_id: 's2', created_at: d(1), message_type: 'follow_up', message_preview: 'Following up on delayed shipment. ETA update needed.', quantity: null, unit_price: null, channel: 'phone', status: 'sent' },
+  { id: 'scl7', supplier_id: 's3', created_at: d(0.5), message_type: 'complaint', message_preview: 'Last prawn delivery had 15% undersized. Quality control issue.', quantity: null, unit_price: null, channel: 'whatsapp', status: 'sent' },
+  { id: 'scl8', supplier_id: 's4', created_at: d(0.1), message_type: 'order', message_preview: 'PO #1250 — Dried anchovies 15kg, cooking oil 10L. Standard pricing.', quantity: 25, unit_price: 16.50, channel: 'whatsapp', status: 'sent' },
+];
