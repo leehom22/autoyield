@@ -38,10 +38,74 @@ class ProactiveState(TypedDict):
     action_taken: bool
     node_tool_call_count: int
 
+    direct_route: str
+    crisis_message: str
+    crisis_summary: str
 
 # ─────────────────────────────────────────────
 # Node 1: Anomaly classifier
 # ─────────────────────────────────────────────
+import os
+
+DEBUG_GRAPH = os.getenv("DEBUG_GRAPH", "true").lower() == "true"
+
+RESET  = "\033[0m"
+BOLD   = "\033[1m"
+BLUE   = "\033[94m"
+GREEN  = "\033[92m"
+YELLOW = "\033[93m"
+GRAY   = "\033[90m"
+
+def subheader(text):
+    if DEBUG_GRAPH:
+        print(f"\n{BOLD}{BLUE} ▶ {text}{RESET}")
+
+def ok(text):
+    if DEBUG_GRAPH:
+        print(f" {GREEN}✓ {text}{RESET}")
+
+def warn(text):
+    if DEBUG_GRAPH:
+        print(f" {YELLOW}⚠ {text}{RESET}")
+
+def dim(text):
+    if DEBUG_GRAPH:
+        print(f" {GRAY}{text}{RESET}")
+
+
+def debug_state(node, state):
+    if not DEBUG_GRAPH:
+        return
+
+    subheader(f"Node: {node}")
+
+    fields = {
+        "anomaly_type": state.get("anomaly_type"),
+        "pending_handler": state.get("pending_handler"),
+        "action_taken": state.get("action_taken"),
+        "node_tool_call_count": state.get("node_tool_call_count"),
+    }
+
+    dim(f"State: {fields}")
+
+    if state.get("messages"):
+        last = state["messages"][-1]
+
+        if getattr(last, "tool_calls", None):
+            for tc in last.tool_calls:
+                dim(
+                    f"Tool call → "
+                    f"{tc.get('name')}("
+                    f"{str(tc.get('args', {}))[:120]})"
+                )
+        else:
+            dim(
+                f"Last message: "
+                f"{type(last).__name__}: "
+                f"{str(getattr(last,'content',''))[:250]}"
+            )
+            
+            
 def anomaly_classifier_node(state: ProactiveState) -> ProactiveState:
     """
     Reads the DB alert message and classifies it.
@@ -63,7 +127,13 @@ Respond ONLY with the single classification word. No explanation."""
     anomaly = classification if classification in valid else "unknown"
     has_tool = bool(getattr(response, "tool_calls", None))
 
-    return {**state, "anomaly_type": anomaly, }
+    new_state = {
+        **state,
+        "anomaly_type": anomaly,
+    }
+
+    debug_state("anomaly_classifier:end", new_state)
+    return new_state
 
 
 
@@ -89,13 +159,16 @@ Summarize the margin impact.
     response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
     has_tool = bool(getattr(response, "tool_calls", None))
 
-    return {
+    new_state ={
         **state,
         "messages": [response],
         "pending_handler": "evaluate_margin",
         "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
 
     }
+
+    debug_state("evaluate_margin:end", new_state)
+    return new_state
 
 
 def flash_sale_node(state: ProactiveState) -> ProactiveState:
@@ -112,13 +185,16 @@ config={discount:0.25, audience:'all', budget:50}
 
     response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
     has_tool = bool(getattr(response, "tool_calls", None))
-
-    return {
+    
+    new_state = {
         **state,
         "messages": [response],
         "pending_handler": "flash_sale",
         "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
     }
+    
+    debug_state("flash_sale:end", new_state)
+    return new_state
 
 
 def notify_frontend_log_node(state: ProactiveState) -> ProactiveState:
@@ -144,13 +220,15 @@ If supplier contact is needed, call contact_supplier(message_type='emergency_res
     response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
     has_tool = bool(getattr(response, "tool_calls", None))
 
-    return {
+    new_state = {
         **state,
         "messages": [response],
         "pending_handler": "notify_frontend_log",
         "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
         "action_taken": True,
     }
+    debug_state("notify_frontend_log:end", new_state)
+    return new_state
 
 
 def check_capacity_node(state: ProactiveState) -> ProactiveState:
@@ -169,13 +247,14 @@ Then call check_operational_capacity using pending_orders as projected_order_sur
     response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
     has_tool = bool(getattr(response, "tool_calls", None))
 
-    return {
+    new_state = {
         **state,
         "messages": [response],
         "pending_handler": "check_capacity",
         "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
     }
-
+    debug_state("check_capacity:end", new_state)
+    return new_state
 
 def rewrite_menu_node(state: ProactiveState) -> ProactiveState:
     tools = [t for t in get_all_lc_tools() if t.name in [
@@ -193,12 +272,15 @@ Then call execute_operational_action(action_type='UPDATE_MENU') to temporarily f
     response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
     has_tool = bool(getattr(response, "tool_calls", None))
 
-    return {
+    
+    new_state =  {
         **state,
         "messages": [response],
         "pending_handler": "rewrite_menu",
         "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
     }
+    debug_state("rewrite_menu:end", new_state)
+    return new_state
 
 
 def alert_kds_node(state: ProactiveState) -> ProactiveState:
@@ -217,13 +299,15 @@ Then call send_human_notification(priority='high') summarizing surge, menu chang
     response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
     has_tool = bool(getattr(response, "tool_calls", None))
 
-    return {
+    new_state = {
         **state,
         "messages": [response],
         "pending_handler": "alert_kds",
         "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
         "action_taken": True,
     }
+    debug_state("alert_kds:end", new_state)
+    return new_state
 
 
 def postmortem_node(state: ProactiveState) -> ProactiveState:
@@ -238,57 +322,140 @@ Call generate_post_mortem_learning for this proactive event.
     response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
     has_tool = bool(getattr(response, "tool_calls", None))
 
-    return {
+    new_state = {
         **state,
         "messages": [response],
         "pending_handler": "postmortem",
         "node_tool_call_count": state.get("node_tool_call_count", 0) + (1 if has_tool else 0),
         "final_response": "Proactive response completed and logged.",
     }
+    debug_state("postmortem:end", new_state)
+    return new_state
 
+def crisis_optimizer_node(state: ProactiveState) -> ProactiveState:
+    crisis_msg = state.get("crisis_message", "")
+
+    lower = crisis_msg.lower()
+
+    if "inventory" in lower or "stock" in lower or "below minimum" in lower:
+        anomaly_type = "stock_critical"
+        summary = f"Crisis optimizer routed to stock-critical flow: {crisis_msg}"
+
+    elif "order" in lower or "surge" in lower or "kitchen" in lower:
+        anomaly_type = "kitchen_surge"
+        summary = f"Crisis optimizer routed to kitchen-surge flow: {crisis_msg}"
+
+    else:
+        anomaly_type = "unknown"
+        summary = f"Crisis optimizer could not classify crisis: {crisis_msg}"
+
+    new_state = {
+        **state,
+        "anomaly_type": anomaly_type,
+        "crisis_summary": summary,
+        "pending_handler": "crisis_optimizer",
+        "node_tool_call_count": 0,
+    }
+
+    debug_state("crisis_optimizer:end", new_state)
+    return new_state
 
 # ─────────────────────────────────────────────
 # Routing functions
 # ─────────────────────────────────────────────
-def route_anomaly(state: ProactiveState) -> str:
+def route_from_start(state: ProactiveState) -> str:
+    debug_state("route_from_start", state)
+
+    if state.get("direct_route") == "crisis_optimizer":
+        ok("START → crisis_optimizer")
+        return "crisis_optimizer"
+
+    ok("START → anomaly_classifier")
+    return "anomaly_classifier"
+
+def route_after_crisis_optimizer(state: ProactiveState) -> str:
+    debug_state("route_after_crisis_optimizer", state)
+
     if state.get("anomaly_type") == "stock_critical":
+        ok("crisis_optimizer → evaluate_margin")
         return "evaluate_margin"
+
     if state.get("anomaly_type") == "kitchen_surge":
+        ok("crisis_optimizer → check_capacity")
         return "check_capacity"
+
+    warn("crisis_optimizer → END")
     return END
 
+def route_anomaly(state):
+    debug_state("route_anomaly", state)
 
-def route_tools(state: ProactiveState) -> str:
+    if state.get("anomaly_type")=="stock_critical":
+        ok("Routing → evaluate_margin")
+        return "evaluate_margin"
+
+    if state.get("anomaly_type")=="kitchen_surge":
+        ok("Routing → check_capacity")
+        return "check_capacity"
+
+    warn("Routing → END")
+    return END
+
+MAX_TOOL_CALLS_PER_NODE = 4
+
+def route_tools(state):
+    debug_state("route_tools", state)
+
     last = state["messages"][-1]
+    has_tool_calls = bool(getattr(last, "tool_calls", None))
+    tool_count = state.get("node_tool_call_count", 0)
 
-    if getattr(last, "tool_calls", None):
-        if state.get("node_tool_call_count", 0) >= 4:
+    if has_tool_calls:
+        if tool_count >= MAX_TOOL_CALLS_PER_NODE:
+            warn("tool cap reached → next")
             return "__next__"
+
+        ok("Routing → tool_node")
         return "tool_node"
 
+    ok("Routing → next")
     return "__next__"
 
 
 def route_after_tools(state: ProactiveState) -> str:
+    debug_state("route_after_tools", state)
+
     handler = state.get("pending_handler", "none")
 
     if handler == "evaluate_margin":
+        ok("tool_node → flash_sale")
         return "flash_sale"
+
     if handler == "flash_sale":
+        ok("tool_node → notify_frontend_log")
         return "notify_frontend_log"
+
     if handler == "notify_frontend_log":
+        ok("tool_node → postmortem")
         return "postmortem"
 
     if handler == "check_capacity":
+        ok("tool_node → rewrite_menu")
         return "rewrite_menu"
+
     if handler == "rewrite_menu":
+        ok("tool_node → alert_kds")
         return "alert_kds"
+
     if handler == "alert_kds":
+        ok("tool_node → postmortem")
         return "postmortem"
 
     if handler == "postmortem":
+        ok("tool_node → END")
         return END
 
+    warn("tool_node → END | unknown handler")
     return END
 
 # ─────────────────────────────────────────────
@@ -298,7 +465,8 @@ def build_proactive_graph():
     builder = StateGraph(ProactiveState)
 
     builder.add_node("anomaly_classifier", anomaly_classifier_node)
-
+    builder.add_node("crisis_optimizer", crisis_optimizer_node)
+    
     builder.add_node("evaluate_margin", evaluate_margin_node)
     builder.add_node("flash_sale", flash_sale_node)
     builder.add_node("notify_frontend_log", notify_frontend_log_node)
@@ -310,8 +478,18 @@ def build_proactive_graph():
     builder.add_node("postmortem", postmortem_node)
     builder.add_node("tool_node", ToolNode(get_all_lc_tools()))
 
-    builder.add_edge(START, "anomaly_classifier")
-
+    builder.add_conditional_edges(START, route_from_start, {
+        "anomaly_classifier": "anomaly_classifier",
+        "crisis_optimizer": "crisis_optimizer",
+    })
+    
+    builder.add_conditional_edges("crisis_optimizer", route_after_crisis_optimizer, {
+        "evaluate_margin": "evaluate_margin",
+        "check_capacity": "check_capacity",
+        END: END,
+    })
+        
+    
     builder.add_conditional_edges("anomaly_classifier", route_anomaly, {
         "evaluate_margin": "evaluate_margin",
         "check_capacity": "check_capacity",

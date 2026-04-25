@@ -18,7 +18,7 @@ load_dotenv()
 # Constants
 # ─────────────────────────────────────────────
 MAX_TOOL_CALLS_PER_NODE = 4
-
+MAX_FORECAST_DEBATE_ROUNDS = 3
 
 # ─────────────────────────────────────────────
 # LLM
@@ -56,6 +56,12 @@ class ForecastState(TypedDict):
     notification_id: str
 
     node_tool_call_count: int
+    
+    p_agent_position: str
+    r_agent_position: str
+    debate_rounds: int
+    consensus_reached: bool
+    debate_started: bool
 
 
 # ─────────────────────────────────────────────
@@ -149,9 +155,111 @@ Rules:
 Do not call any other tool.
 """
 
+FORECAST_P_AGENT_PROMPT = """
+    You are the Forecast P-Agent.
+
+    Your job is to argue for the most business-beneficial macro-crisis response.
+
+    Focus on:
+    - protecting revenue
+    - adjusting prices or menus
+    - reducing waste
+    - maintaining service continuity
+    - using demand forecast signals
+
+    Do NOT call tools.
+    Give 2-4 sentences.
+    End with one concrete recommendation.
+"""
+
+FORECAST_R_AGENT_PROMPT = """
+    You are the Forecast R-Agent.
+
+    Your job is to challenge the P-Agent's crisis response.
+
+    Focus on:
+    - operational risk
+    - customer backlash
+    - supply uncertainty
+    - forecast uncertainty
+    - execution risk
+
+    If the P-Agent's proposal is acceptable, start with:
+    CONSENSUS:
+
+    Otherwise, state the biggest risk and one required guardrail.
+
+    Do NOT call tools.
+    Give 2-4 sentences.
+"""
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
+
+DEBUG_GRAPH = True
+
+RESET  = "\033[0m"
+BOLD   = "\033[1m"
+BLUE   = "\033[94m"
+GREEN  = "\033[92m"
+YELLOW = "\033[93m"
+GRAY   = "\033[90m"
+
+
+def subheader(text):
+    if DEBUG_GRAPH:
+        print(f"\n{BOLD}{BLUE} ▶ {text}{RESET}")
+
+
+def ok(text):
+    if DEBUG_GRAPH:
+        print(f" {GREEN}✓ {text}{RESET}")
+
+
+def warn(text):
+    if DEBUG_GRAPH:
+        print(f" {YELLOW}⚠ {text}{RESET}")
+
+
+def dim(text):
+    if DEBUG_GRAPH:
+        print(f" {GRAY}{text}{RESET}")
+
+
+def debug_state(node, state):
+    if not DEBUG_GRAPH:
+        return
+
+    subheader(f"Node: {node}")
+
+    fields = {
+        "forecast_path": state.get("forecast_path"),
+        "pending_handler": state.get("pending_handler"),
+        "macro_risk_level": state.get("macro_risk_level"),
+        "debate_rounds": state.get("debate_rounds"),
+        "consensus_reached": state.get("consensus_reached"),
+        "node_tool_call_count": state.get("node_tool_call_count"),
+    }
+
+    dim(f"State: {fields}")
+
+    if state.get("messages"):
+        last = state["messages"][-1]
+
+        if getattr(last, "tool_calls", None):
+            for tc in last.tool_calls:
+                dim(
+                    f"Tool call → "
+                    f"{tc.get('name')}("
+                    f"{str(tc.get('args',{}))[:150]})"
+                )
+        else:
+            dim(
+                f"Last message: "
+                f"{type(last).__name__}: "
+                f"{str(getattr(last,'content',''))[:250]}"
+            )
+            
 def _safe_llm_call(llm, messages, node_name: str):
     try:
         return llm.invoke(messages)
@@ -180,7 +288,70 @@ def _extract_tool_summary(messages, max_results=3):
 # Nodes
 # ─────────────────────────────────────────────
 
+def forecast_p_agent_node(state: ForecastState) -> ForecastState:
+    llm = get_glm()
+
+    context = (
+        f"MACRO CRISIS REQUEST:\n{state.get('user_query', '')}\n\n"
+        f"SIGNAL SUMMARY:\n{state.get('signal_summary', '')}\n\n"
+        f"CURRENT FORECAST RESULT:\n{state.get('forecast_result', '')}\n\n"
+        f"CONSTRAINT SUMMARY:\n{state.get('constraint_summary', '')}\n\n"
+        "Propose the most profitable and practical crisis response."
+    )
+
+    response = _safe_llm_call(
+        llm,
+        [
+            SystemMessage(content=FORECAST_P_AGENT_PROMPT),
+            HumanMessage(content=context),
+        ],
+        "forecast_p_agent",
+    )
+
+    new_state = {
+        **state,
+        "messages": [response],
+        "p_agent_position": response.content,
+        "debate_started": True,
+        "debate_rounds": state.get("debate_rounds", 0) + 1,
+    }
+    debug_state("forecast_p_agent:end", new_state)
+    return new_state
+
+
+def forecast_r_agent_node(state: ForecastState) -> ForecastState:
+    llm = get_glm()
+
+    context = (
+        f"MACRO CRISIS REQUEST:\n{state.get('user_query', '')}\n\n"
+        f"SIGNAL SUMMARY:\n{state.get('signal_summary', '')}\n\n"
+        f"P-AGENT PROPOSAL:\n{state.get('p_agent_position', '')}\n\n"
+        "Critique the proposal and decide whether to accept it."
+    )
+
+    response = _safe_llm_call(
+        llm,
+        [
+            SystemMessage(content=FORECAST_R_AGENT_PROMPT),
+            HumanMessage(content=context),
+        ],
+        "forecast_r_agent",
+    )
+
+    content = response.content
+    consensus = content.strip().upper().startswith("CONSENSUS")
+
+    new_state = {
+        **state,
+        "messages": [AIMessage(content=f"[Forecast R-Agent]: {content}")],
+        "r_agent_position": content,
+        "consensus_reached": consensus,
+    }
+    debug_state("forecast_r_agent:end", new_state)
+    return new_state
+    
 def supervisor_node(state: ForecastState) -> ForecastState:
+    debug_state("supervisor:start", state)
     llm = get_glm().bind_tools(get_all_lc_tools())
 
     user_query = state.get("user_query", "")
@@ -196,7 +367,7 @@ def supervisor_node(state: ForecastState) -> ForecastState:
         "supervisor"
     )
 
-    return {
+    new_state = {
         **state,
         "messages": [response],
         "user_query": user_query,
@@ -204,9 +375,12 @@ def supervisor_node(state: ForecastState) -> ForecastState:
         "node_tool_call_count": state.get("node_tool_call_count", 0)
         + (1 if getattr(response, "tool_calls", None) else 0),
     }
+    debug_state("supervisor:start", new_state)
+    return new_state
 
 
 def signal_agent_node(state: ForecastState) -> ForecastState:
+    debug_state("signal_agent:start", state)
     llm = get_glm()
 
     tool_summary = _extract_tool_summary(state["messages"])
@@ -220,12 +394,13 @@ def signal_agent_node(state: ForecastState) -> ForecastState:
         "signal_agent"
     )
 
-    return {
+    new_state = {
         **state,
         "messages": [response],
         "signal_summary": response.content,
         "node_tool_call_count": 0,
     }
+    debug_state("signal_agent:end", new_state)
 
 def _extract_risk_level(text: str) -> str:
     lower = text.lower()
@@ -240,6 +415,7 @@ def _extract_risk_level(text: str) -> str:
     return "unknown"
 
 def forecast_agent_node(state: ForecastState) -> ForecastState:
+    debug_state("forecast_agent:start", state)
     llm = get_glm()
 
     context = (
@@ -259,7 +435,7 @@ def forecast_agent_node(state: ForecastState) -> ForecastState:
 
     risk_level = _extract_risk_level(response.content)
 
-    return {
+    new_state = {
         **state,
         "messages": [response],
         "forecast_result": response.content,
@@ -268,8 +444,11 @@ def forecast_agent_node(state: ForecastState) -> ForecastState:
         "pending_handler": "notification",
         "node_tool_call_count": 0,
     }
+    debug_state("forecast_agent:start", new_state)
+    return new_state
     
 def notification_node(state: ForecastState) -> ForecastState:
+    debug_state("forecast_agent:start", state)
     if state.get("notification_sent", False):
         return {
             **state,
@@ -305,13 +484,16 @@ def notification_node(state: ForecastState) -> ForecastState:
         "notification_node"
     )
 
-    return {
+    new_state = {
         **state,
         "messages": [response],
         "pending_handler": "notification",
         "notification_sent": bool(getattr(response, "tool_calls", None)),
         "node_tool_call_count": 1 if getattr(response, "tool_calls", None) else 0,
     }
+    debug_state("forecast_agent:end", new_state)
+    return new_state
+    
 
 def reorder_trigger_node(state: ForecastState) -> ForecastState:
     return {
@@ -328,12 +510,28 @@ def kitchen_prewarn_node(state: ForecastState) -> ForecastState:
 
 
 def crisis_optimizer_node(state: ForecastState) -> ForecastState:
-    return {
+    crisis_msg = state.get("user_query", "") or state.get("signal_summary", "")
+
+    
+    new_state = {
         **state,
         "forecast_path": "crisis",
-        "forecast_result": state.get("forecast_result", "") or "Crisis forecast mode activated.",
+        "signal_summary": state.get("signal_summary", "") or crisis_msg,
+        "forecast_result": (
+            state.get("forecast_result", "")
+            or f"Macro crisis optimizer activated: {crisis_msg}"
+        ),
+        "macro_risk_level": "high",
+        "debate_started": False,
+        "p_agent_position": "",
+        "r_agent_position": "",
+        "debate_rounds": 0,
+        "consensus_reached": False,
+        "pending_handler": "crisis_optimizer",
+        "node_tool_call_count": 0,
     }
-
+    debug_state("crisis_optimizer:end", new_state)
+    return new_state
 
 def constraint_node(state: ForecastState) -> ForecastState:
     return {
@@ -343,9 +541,14 @@ def constraint_node(state: ForecastState) -> ForecastState:
 
 
 def revised_plan_node(state: ForecastState) -> ForecastState:
-    revised = "Generated revised crisis plan with pricing, menu, and impact estimates."
+    revised = (
+        "Generated revised macro-crisis plan based on P/R debate.\n\n"
+        f"P-Agent Position:\n{state.get('p_agent_position', '')}\n\n"
+        f"R-Agent Position:\n{state.get('r_agent_position', '')}\n\n"
+        "Final Plan: Apply the agreed crisis response with high-priority monitoring."
+    )
 
-    return {
+    new_state = {
         **state,
         "forecast_path": "crisis",
         "revised_plan": revised,
@@ -354,46 +557,87 @@ def revised_plan_node(state: ForecastState) -> ForecastState:
         "plan_generated": True,
         "pending_handler": "notification",
     }
+    debug_state("revised_plan:end", new_state)
+    return new_state
     
 # ─────────────────────────────────────────────
 # Routing
 # ─────────────────────────────────────────────
 
-def route_after_supervisor(state: ForecastState):
+def route_from_start(state):
+    debug_state("route_from_start", state)
+
+    if state.get("forecast_path") == "crisis":
+        ok("START → crisis_optimizer")
+        return "crisis_optimizer"
+
+    ok("START → supervisor")
+    return "supervisor"
+
+def route_after_supervisor(state):
+    debug_state("route_after_supervisor", state)
+
     last = state["messages"][-1]
 
-    if getattr(last, "tool_calls", None):
-        if state.get("node_tool_call_count", 0) >= MAX_TOOL_CALLS_PER_NODE:
+    if getattr(last,"tool_calls",None):
+
+        if state.get("node_tool_call_count",0)>=MAX_TOOL_CALLS_PER_NODE:
+            warn("Supervisor tool cap reached → signal_agent")
             return "signal_agent"
+
+        ok("supervisor → tool_node")
         return "tool_node"
 
+    ok("supervisor → signal_agent")
     return "signal_agent"
 
 
-def route_after_tools(state: ForecastState):
-    handler = state.get("pending_handler", "supervisor")
+def route_after_forecast_r_agent(state):
+    debug_state("route_after_forecast_r_agent", state)
 
-    if handler == "notification":
+    if state.get("consensus_reached"):
+        ok("Debate consensus → constraint_node")
+        return "constraint_node"
+
+    if state.get("debate_rounds",0)>=MAX_FORECAST_DEBATE_ROUNDS:
+        warn("Max debate rounds hit → constraint_node")
+        return "constraint_node"
+
+    ok("Looping debate → forecast_p_agent")
+    return "forecast_p_agent"
+
+def route_after_tools(state):
+    debug_state("route_after_tools", state)
+
+    handler=state.get("pending_handler","supervisor")
+
+    if handler=="notification":
+        ok("tool_node → END")
         return END
 
-    if handler == "supervisor":
+    if handler=="supervisor":
+        ok("tool_node → signal_agent")
         return "signal_agent"
 
+    warn("tool_node fallback → END")
     return END
 
 
-def route_after_signal(state: ForecastState):
-    signals = state.get("signal_summary", "").lower()
+def route_after_signal(state):
+    debug_state("route_after_signal", state)
 
-    crisis_keywords = [
-        "oil", "usd/myr", "inflation", "macro",
-        "spike", "shortage", "zero stock",
-        "high risk", "crisis", "supply disruption"
+    signals=state.get("signal_summary","").lower()
+
+    crisis_keywords=[
+        "oil","usd/myr","inflation",
+        "spike","shortage","crisis"
     ]
 
     if any(k in signals for k in crisis_keywords):
+        ok("signal_agent → crisis_optimizer")
         return "crisis_optimizer"
 
+    ok("signal_agent → standard_forecast")
     return "standard_forecast"
 
 
@@ -431,8 +675,14 @@ def build_forecast_graph():
 
     builder.add_node("notification_node", notification_node)
 
-    builder.add_edge(START, "supervisor")
+    builder.add_node("forecast_p_agent", forecast_p_agent_node)
+    builder.add_node("forecast_r_agent", forecast_r_agent_node)
 
+    builder.add_conditional_edges(START, route_from_start, {
+        "supervisor": "supervisor",
+        "crisis_optimizer": "crisis_optimizer",
+    })
+    
     builder.add_conditional_edges("supervisor", route_after_supervisor, {
         "tool_node": "tool_node",
         "signal_agent": "signal_agent",
@@ -452,7 +702,12 @@ def build_forecast_graph():
     builder.add_edge("reorder_trigger", "kitchen_prewarn")
     builder.add_edge("kitchen_prewarn", "notification_node")
 
-    builder.add_edge("crisis_optimizer", "constraint_node")
+    builder.add_edge("crisis_optimizer", "forecast_p_agent")
+    builder.add_edge("forecast_p_agent", "forecast_r_agent")
+    builder.add_conditional_edges("forecast_r_agent", route_after_forecast_r_agent, {
+        "forecast_p_agent": "forecast_p_agent",
+        "constraint_node": "constraint_node",
+    })
     builder.add_edge("constraint_node", "revised_plan")
     builder.add_edge("revised_plan", "notification_node")
 
