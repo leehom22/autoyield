@@ -15,7 +15,7 @@ _trigger_lock = asyncio.Lock()
 
 async def _can_trigger_and_record(crisis_type: str) -> bool:
     async with _trigger_lock:
-        now = get_current_simulated_time()
+        now = datetime.now()
         last = _last_trigger_real_time.get(crisis_type)
         if last is None:
             _last_trigger_real_time[crisis_type] = now
