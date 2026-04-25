@@ -80,11 +80,9 @@ export default function ProcurementLogs() {
     .from('procurement_logs')
     .select(`
       *,
-      inventory:item_id (name),
-      suppliers:supplier_id (name)
+      inventory!procurement_logs_item_id_fkey (name),
+      suppliers!procurement_logs_supplier_id_fkey (name)
     `)
-    .order('created_at', { ascending: false })
-    .limit(20);
 
     if (data && data.length > 0) {
       const mappedLogs: ProcurementLog[] = data.map((item: any) => ({

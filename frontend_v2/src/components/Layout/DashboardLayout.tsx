@@ -26,7 +26,7 @@ export default function DashboardLayout() {
 
   // SSE connection
   useEffect(() => {
-    const url = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+    const url = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
     try {
       const es = new EventSource(`${url}/api/stream/world-state`);
       es.onopen = () => setConnected(true);
