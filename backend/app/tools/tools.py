@@ -12,6 +12,7 @@ from app.schemas.tools_out import *
 from langchain_core.tools import tool
 from app.services.permission_service import check_action_permission
 from app.engine.simulator import get_current_simulated_time
+from app.core.glm_client import glm_client
 
 # ==========================================
 # Phase 1: Perception

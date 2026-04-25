@@ -32,3 +32,8 @@ test.py
 
 # Ignore all mission log files
 mission_log_*.json
+
+node_modules/
+.DS_Store
+dist/
+.env

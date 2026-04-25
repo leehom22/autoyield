@@ -49,13 +49,38 @@ async def adjust_velocity(payload: GodModeVelocityPayload):
 
 
 # God Mode Crisis Trigger
+@router.post("/trigger-crisis")
+async def trigger_crisis_endpoint(payload: GodModePayload):
+    return await trigger_crisis(payload)
+
 async def trigger_crisis(payload: GodModePayload):
+    # New fields
+    qty_mult = payload.inventory_qty_multiplier if payload.inventory_qty_multiplier != 1.0 else payload.inventory_multiplier
+    cost_mult = payload.inventory_cost_multiplier if payload.inventory_cost_multiplier != 1.0 else payload.inventory_multiplier
+
     # 1. Inventory Adjustment
-    if payload.inventory_multiplier != 1.0:
+    if qty_mult != 1.0 or cost_mult != 1.0:
         if payload.inventory_target_id:
-            supabase.table("inventory").update({"qty": supabase.raw(f"qty * {payload.inventory_multiplier}")}).eq("id", payload.inventory_target_id).execute()
+            result = supabase.table("inventory").select("qty, unit_cost").eq("id", payload.inventory_target_id).execute()
+            if result.data:
+                item = result.data[0]
+                updates = {}
+                if qty_mult != 1.0:
+                    updates["qty"] = item["qty"] * qty_mult
+                if cost_mult != 1.0:
+                    updates["unit_cost"] = item["unit_cost"] * cost_mult
+                if updates:
+                    supabase.table("inventory").update(updates).eq("id", payload.inventory_target_id).execute()
         else:
-            supabase.table("inventory").update({"qty": supabase.raw(f"qty * {payload.inventory_multiplier}")}).execute()
+            items = supabase.table("inventory").select("id, qty, unit_cost").execute()
+            for item in items.data:
+                updates = {}
+                if qty_mult != 1.0:
+                    updates["qty"] = item["qty"] * qty_mult
+                if cost_mult != 1.0:
+                    updates["unit_cost"] = item["unit_cost"] * cost_mult
+                if updates:
+                    supabase.table("inventory").update(updates).eq("id", item["id"]).execute()
 
     # 2. Oil Price Adjustment
     if payload.oil_price_multiplier != 1.0:
