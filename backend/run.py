@@ -35,7 +35,7 @@ if __name__ == "__main__":
         with open("diagrams/inventory_graph.png", "wb") as f:
             f.write(inventory_graph.get_graph().draw_mermaid_png())
             
-        print("✅ Graph visualizations saved to /diagrams folder.")
+        print(" Graph visualizations saved to /diagrams folder.")
     except Exception as e:
         print(f"⚠️ Visualization skipped: {e}")
     uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
