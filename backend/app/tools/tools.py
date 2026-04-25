@@ -430,7 +430,7 @@ async def execute_operational_action(params: ExecuteOperationalActionInput) -> E
             status = "success"
 
         elif params.action_type == "ALERT_KDS":
-            supabase.table("kds_events").insert(params.payload.new_value).execute()
+            supabase.table("kds_queue").insert(params.payload.new_value).execute()
             status = "success"
         
         elif params.action_type == "RECRUIT_STAFF":

@@ -118,7 +118,7 @@ async def chat(req: ChatRequest):
     return ChatResponse(
         session_id=session_id,
         # Note: I changed 'result' to 'api_response' or 'execution' as 'result' was undefined
-        response=api_response.get("final_response", "No response generated."),
+        response=execution.get("final_response", "No response generated."),
         p_agent_position=agents.get("p_agent_position"),
         r_agent_position=agents.get("r_agent_position"),
         debate_rounds=route.get("debate_rounds"),

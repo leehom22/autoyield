@@ -5,6 +5,9 @@ from app.core.state import SYSTEM_STATE
 from app.engine.simulator import get_current_simulated_time
 from langchain_core.messages import HumanMessage
 from app.core.config import settings
+from app.graph.proactive_graph import get_proactive_graph
+from app.graph.forecast_graph import get_forecast_graph
+from app.engine.simulator import world_engine
 
 # Avoid agent from being triggered when handling crisis
 _last_trigger_real_time = {}
@@ -26,39 +29,93 @@ async def _can_trigger_and_record(crisis_type: str) -> bool:
 def _record_trigger(crisis_type: str):
     _last_trigger_real_time[crisis_type] = datetime.now()
 
-async def _call_agent(app, crisis_msg: str):
-    
-    graph = app.state.graph
-    print(f"🔍 [Crisis Monitor] Processing crisis: {crisis_msg[:100]}...")
-    
-    # # Pause world
-    # world_engine.pause_world()
-    # print(f"⏸️ [Crisis Monitor] World paused. Processing crisis: {crisis_msg[:100]}...")
-    
+async def _call_proactive_agent(app, crisis_msg: str):
+    graph = get_proactive_graph()
+    print(f"🔍 [Crisis Monitor] Routing to proactive_graph: {crisis_msg[:100]}...")
+
     try:
-        # Call Agent
         result = await graph.ainvoke({
-            "messages": [HumanMessage(content=f"SYSTEM CRISIS DETECTED: {crisis_msg}. Analyze and propose actions.")]
+            "messages": [
+                HumanMessage(
+                    content=f"SYSTEM CRISIS DETECTED: {crisis_msg}. Analyze and propose actions."
+                )
+            ],
+
+            "direct_route": "crisis_optimizer",
+            "crisis_message": crisis_msg,
+
+            "anomaly_type": "unknown",
+            "pending_handler": "crisis_optimizer",
+
+            "margin_summary": "",
+            "capacity_summary": "",
+            "menu_rewrite_summary": "",
+            "kds_summary": "",
+            "final_response": "",
+
+            "action_taken": False,
+            "node_tool_call_count": 0,
         })
-        
-        # Record decision log
+
         supabase.table("decision_logs").insert({
-            "trigger_signal": "CRISIS_MONITOR",
+            "trigger_signal": "CRISIS_MONITOR_PROACTIVE",
             "timestamp": get_current_simulated_time().isoformat(),
-            "p_agent_argument": result.get("p_agent_position", ""),
-            "r_agent_argument": result.get("r_agent_position", ""),
-            "resolution": "Auto-triggered",
+            "p_agent_argument": "",
+            "r_agent_argument": "",
+            "resolution": "Auto-triggered proactive crisis response",
             "action_taken": result.get("final_response", "")[:500],
         }).execute()
-        print(f"✅ Crisis monitor triggered Agent. Response: {result.get('final_response', '')[:100]}...")
-        
+
+        print(f"✅ Proactive agent completed: {result.get('final_response', '')[:100]}...")
+
     except Exception as e:
-        print(f"❌ Crisis monitor failed to call Agent: {e}")
-    
-    # finally:
-    #     # Resume world
-    #     world_engine.resume_world()
-    #     print("▶️ [Crisis Monitor] World resumed.")
+        print(f"❌ Proactive agent failed: {e}")
+
+
+async def _call_forecast_agent(app, crisis_msg: str):
+    graph = get_forecast_graph()
+    print(f"🔍 [Crisis Monitor] Routing to forecast_graph crisis_optimizer: {crisis_msg[:100]}...")
+
+    try:
+        result = await graph.ainvoke({
+            "messages": [
+                HumanMessage(
+                    content=f"MACRO CRISIS DETECTED: {crisis_msg}. Analyze macro impact and propose forecast-based actions."
+                )
+            ],
+
+            "forecast_path": "crisis",
+            "user_query": crisis_msg,
+            "signal_summary": crisis_msg,
+
+            "reorder_plan": "",
+            "kitchen_warning": "",
+            "constraint_summary": "",
+            "revised_plan": "",
+            "forecast_result": "",
+
+            "macro_risk_level": "high",
+            "plan_generated": False,
+
+            "pending_handler": "crisis_optimizer",
+            "notification_sent": False,
+            "notification_id": "",
+            "node_tool_call_count": 0,
+        })
+
+        supabase.table("decision_logs").insert({
+            "trigger_signal": "CRISIS_MONITOR_FORECAST",
+            "timestamp": get_current_simulated_time().isoformat(),
+            "p_agent_argument": "",
+            "r_agent_argument": "",
+            "resolution": "Auto-triggered macro forecast crisis response",
+            "action_taken": result.get("forecast_result", "")[:500],
+        }).execute()
+
+        print(f"✅ Forecast agent completed: {result.get('forecast_result', '')[:100]}...")
+
+    except Exception as e:
+        print(f"❌ Forecast agent failed: {e}")
 
 
 async def check_and_trigger_crisis(app):
@@ -75,7 +132,7 @@ async def check_and_trigger_crisis(app):
         _record_trigger("inventory_crisis")
         item_names = [i["name"] for i in low_stock_items[:3]]
         msg = f"Inventory crisis: {len(low_stock_items)} items below minimum stock. Examples: {', '.join(item_names)}."
-        await _call_agent(app, msg)
+        await _call_proactive_agent(app, msg)
         return
     
     # 2. Oil Price Spike (Compare between last 2 price)
@@ -87,7 +144,7 @@ async def check_and_trigger_crisis(app):
             _record_trigger("oil_spike")
             pct = (latest / previous - 1) * 100
             msg = f"Oil price spike: from {previous:.2f} to {latest:.2f} (+{pct:.0f}%)."
-            await _call_agent(app, msg)
+            await _call_forecast_agent(app, msg)
             return
     
     # 3. Abnormal Order Velocity
@@ -95,7 +152,7 @@ async def check_and_trigger_crisis(app):
     if velocity > 3.0 and await _can_trigger_and_record("inventory_crisis"):
         _record_trigger("order_surge")
         msg = f"Order velocity surge detected: current multiplier {velocity:.1f}x normal rate."
-        await _call_agent(app, msg)
+        await _call_proactive_agent(app, msg)
         return
 
 async def crisis_monitor_loop(app):
